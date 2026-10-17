@@ -42,6 +42,29 @@ npm run make         # out/make/squirrel.windows/x64/MD-<version> Setup.exe and 
 
 The installer is unsigned (PLAN.md R-14); Windows SmartScreen will warn on first run.
 
+## Releasing (for friends and updates)
+
+Releases live on GitHub: <https://github.com/GianniGuava/md-editor/releases>. Installed
+copies check for a newer release about once an hour and install it in the background,
+asking to restart when it is ready (Squirrel through update.electronjs.org, which serves
+public repositories only).
+
+1. Bump `version` in `package.json` (Squirrel orders updates by version).
+2. Commit, then run with a GitHub token that has `repo` scope:
+
+   ```powershell
+   $env:GITHUB_TOKEN = (gh auth token)
+   npm.cmd run release
+   ```
+
+   This builds the installer and uploads `MD-<version> Setup.exe`, `RELEASES` and the
+   `.nupkg` to a **draft** release named after the version.
+3. Open the draft on GitHub, add notes, and press **Publish release**. Friends install
+   once from the Setup.exe; existing installs update themselves from then on.
+
+Until the build is code-signed (PLAN.md R-14, R-20), SmartScreen shows a warning on
+the first install only; updates arrive silently.
+
 ## Export dependencies
 
 HTML and PDF need nothing extra. Word, OpenDocument, EPUB, RTF and LaTeX need

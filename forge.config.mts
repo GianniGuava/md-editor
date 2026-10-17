@@ -2,6 +2,7 @@ import type { ForgeConfig } from '@electron-forge/shared-types';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { PublisherGitHub } from '@electron-forge/publisher-github';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
@@ -23,6 +24,16 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel({ setupIcon: 'assets/app.ico' }),
     new MakerZIP({}, ['win32']),
+  ],
+  // `npm run release` uploads the Squirrel artefacts (Setup.exe, RELEASES, .nupkg) to a
+  // draft GitHub release; installed copies update through update.electronjs.org once the
+  // release is published (VENDOR: Forge publisher-github docs, update-electron-app README).
+  publishers: [
+    new PublisherGitHub({
+      repository: { owner: 'GianniGuava', name: 'md-editor' },
+      draft: true,
+      prerelease: false,
+    }),
   ],
   plugins: [
     new VitePlugin({

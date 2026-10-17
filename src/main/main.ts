@@ -13,6 +13,7 @@ import { buildMenu, type MenuState } from './menu';
 import type { ThemePref } from '../preload/preload';
 import { registerFileHandlers } from './files';
 import { registerExportHandlers } from './export';
+import { updateElectronApp } from 'update-electron-app';
 import { startWatching, stopAllWatchers, stopWatching } from './watcher';
 import {
   deleteDraft,
@@ -220,6 +221,22 @@ ipcMain.handle('watch:start', (_e, p: string) =>
   startWatching(p, () => mainWindow),
 );
 ipcMain.handle('watch:stop', (_e, p: string) => stopWatching(p));
+
+// Auto-update (PLAN.md step 10 / distribution): installed Squirrel builds poll
+// update.electronjs.org for newer GitHub releases of the public repo. Inert in
+// development and in portable (non-Squirrel) copies; failures are logged, never shown.
+if (app.isPackaged) {
+  try {
+    updateElectronApp({
+      repo: 'GianniGuava/md-editor',
+      updateInterval: '1 hour',
+      notifyUser: true,
+      logger: console,
+    });
+  } catch (err) {
+    console.error('[md] updater not started', err);
+  }
+}
 
 app.whenReady().then(() => {
   createWindow();
