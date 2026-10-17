@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MD logo: black Garamond "MD" on a white square.
+     Font stack: EB Garamond (SIL OFL, Google Fonts) -> Garamond (Microsoft, if installed) -> serif.
+     Before shipping as .ico/.png, convert the text to outlines so the glyphs do not depend on installed fonts
+     (see PLAN.md step 7). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="MD">
+  <rect width="512" height="512" fill="#FFFFFF"/>
+  <text x="256" y="256" fill="#000000"
+        font-family="'EB Garamond','Garamond',serif" font-weight="500" font-size="300"
+        text-anchor="middle" dominant-baseline="central" letter-spacing="-8">MD</text>
+</svg>
