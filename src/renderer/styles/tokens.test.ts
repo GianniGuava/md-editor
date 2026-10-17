@@ -38,9 +38,9 @@ export function contrast(a: string, b: string): number {
 }
 
 const themes: [string, string, number][] = [
-  [':root[data-theme="light"]', 'light', 4.5],
-  [':root[data-theme="dark"]', 'dark', 4.5],
-  [':root[data-theme="hc"]', 'high contrast', 7],
+  [":root[data-theme='light']", 'light', 4.5],
+  [":root[data-theme='dark']", 'dark', 4.5],
+  [":root[data-theme='hc']", 'high contrast', 7],
 ];
 
 describe.each(themes)('%s', (selector, _name, textRatio) => {

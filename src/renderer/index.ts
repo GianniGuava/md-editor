@@ -9,14 +9,15 @@ import { DocStore, type Doc } from './documents';
 import { createTabBar } from './tabs';
 import { installAltOverlay } from './altKeys';
 import { createBanners } from './banners';
-import { createTheme, type ThemePref } from './theme';
 import { installWatching } from './watching';
+import { createTheme, type ThemePref } from './theme';
+import { installSession } from './session';
 import { SAMPLE } from './sample';
 import type { FileData } from '../preload/preload';
 
 /**
- * Renderer entry (step 3): tabs over one editor/preview pair, file open/save
- * through the bridge, the single close-confirmation flow, Alt shortcut overlay.
+ * Renderer entry: tabs over one editor/preview pair, file open/save through the
+ * bridge, watch/reload banners, themes, and session capture/restore.
  */
 
 function button(
@@ -57,6 +58,7 @@ async function boot(): Promise<void> {
     window.clearTimeout(noteTimer);
     noteTimer = window.setTimeout(() => (statusNote.textContent = ''), 8000);
   };
+
   if (!window.md) {
     status.textContent = 'Open this page inside the MD app (no bridge found).';
     return;
@@ -73,6 +75,7 @@ async function boot(): Promise<void> {
   const store = new DocStore();
   const layout = createLayout(document.getElementById('workspace')!);
   const preview = createPreview(layout.previewPane);
+  const banners = createBanners(document.getElementById('banners')!);
 
   let renderTimer: number | undefined;
   const scheduleRender = (text: string) => {
@@ -89,10 +92,15 @@ async function boot(): Promise<void> {
         d.savedText === null ? text.length > 0 : text !== d.savedText;
       if (dirty !== d.dirty) store.update(d.id, { dirty });
       scheduleRender(text);
+      session.touch();
     },
-    onCursorChange: () => updateStatus(),
+    onCursorChange: () => {
+      updateStatus();
+      session.touch();
+    },
   });
   const sync = createScrollSync(editor, preview);
+  let highlightOn = true;
 
   // ---- Document switching ----
   const stash = () => {
@@ -109,7 +117,9 @@ async function boot(): Promise<void> {
     if (!d) return;
     console.log('[md] showing', d.name, d.path ?? '(untitled)');
     editor.setState(d.state);
-    editor.view.scrollDOM.scrollTop = d.scrollTop;
+    requestAnimationFrame(() => {
+      editor.view.scrollDOM.scrollTop = d.scrollTop;
+    });
     preview.render(d.state.doc.toString());
     updateStatus();
     editor.focus();
@@ -143,10 +153,9 @@ async function boot(): Promise<void> {
     if (files.length === 0) return;
     stash();
     // A lone blank untitled tab is replaced rather than kept (ENGINEERING).
+    const list = store.list();
     const blank =
-      store.list().length === 1 && isBlankUntitled(store.list()[0])
-        ? store.list()[0]
-        : null;
+      list.length === 1 && isBlankUntitled(list[0]) ? list[0] : null;
     let last: Doc | null = null;
     for (const f of files) {
       const existing = store.findByPath(f.path);
@@ -172,9 +181,11 @@ async function boot(): Promise<void> {
   };
 
   // ---- Saving ----
+  const textOf = (d: Doc) =>
+    d.id === store.activeId ? editor.getDoc() : d.state.doc.toString();
+
   const saveAs = async (d: Doc): Promise<boolean> => {
-    const text =
-      d.id === store.activeId ? editor.getDoc() : d.state.doc.toString();
+    const text = textOf(d);
     const suggested =
       d.path ?? (d.name.endsWith('.md') ? d.name : `${d.name}.md`);
     const result = await window.md.files.saveAs(suggested, text);
@@ -192,8 +203,7 @@ async function boot(): Promise<void> {
   };
   const save = async (d: Doc): Promise<boolean> => {
     if (!d.path) return saveAs(d);
-    const text =
-      d.id === store.activeId ? editor.getDoc() : d.state.doc.toString();
+    const text = textOf(d);
     const { hash, mtimeMs } = await window.md.files.save(d.path, text);
     store.update(d.id, {
       savedText: text,
@@ -202,6 +212,7 @@ async function boot(): Promise<void> {
       dirty: false,
     });
     updateStatus();
+    note(`Saved "${d.name}"`);
     return true;
   };
 
@@ -240,6 +251,7 @@ async function boot(): Promise<void> {
     for (const d of store.list()) {
       if (d.dirty && !(await closeTab(d.id))) return; // cancelled
     }
+    await session.flush();
     await window.md.closeNow();
   });
 
@@ -261,6 +273,7 @@ async function boot(): Promise<void> {
       store.activeId,
     );
     updateTitle();
+    session.touch();
   });
 
   // ---- Status bar ----
@@ -305,7 +318,7 @@ async function boot(): Promise<void> {
     'ab',
     'Colour Markdown markup in the editor',
     '',
-    () => setHighlight(highlightBtn.getAttribute('aria-pressed') !== 'true'),
+    () => setHighlight(!highlightOn),
     true,
   );
   const syncBtn = button(
@@ -313,7 +326,7 @@ async function boot(): Promise<void> {
     '⇅',
     'Keep editor and preview scrolled together',
     '',
-    () => setSync(syncBtn.getAttribute('aria-pressed') !== 'true'),
+    () => setSync(!sync.isEnabled()),
     true,
   );
   toolbar.append(
@@ -351,13 +364,45 @@ async function boot(): Promise<void> {
     );
   }
   function setHighlight(on: boolean) {
+    highlightOn = on;
     editor.setHighlight(on);
     highlightBtn.setAttribute('aria-pressed', String(on));
+    session.touch();
   }
   function setSync(on: boolean) {
     sync.setEnabled(on);
     syncBtn.setAttribute('aria-pressed', String(on));
+    session.touch();
   }
+  layout.onModeChange(() => session.touch());
+  editor.view.scrollDOM.addEventListener('scroll', () => session.touch(), {
+    passive: true,
+  });
+
+  // ---- Session (step 6) ----
+  const session = installSession({
+    store,
+    editor,
+    banners,
+    stash,
+    show,
+    getUi: () => ({
+      theme: theme.get(),
+      paneMode: layout.getMode(),
+      split: layout.getSplit(),
+      fontSize: zoom.get(),
+      highlight: highlightOn,
+      scrollSync: sync.isEnabled(),
+    }),
+    applyUi: async (ui) => {
+      await theme.set(ui.theme);
+      setMode(ui.paneMode);
+      layout.setSplit(ui.split);
+      zoom.set(ui.fontSize);
+      setHighlight(ui.highlight);
+      setSync(ui.scrollSync);
+    },
+  });
 
   // ---- Commands from the menu (accelerators shown there, D-16) ----
   window.md.onCommand((msg) => {
@@ -404,23 +449,26 @@ async function boot(): Promise<void> {
       case 'scrollSync':
         setSync(msg.checked ?? true);
         break;
+      case 'theme:set':
+        void theme.set((msg.value as ThemePref) ?? 'light').then(session.touch);
+        break;
+      case 'theme:cycle':
+        void theme.cycle().then(session.touch);
+        break;
       case 'zoom:in':
         zoom.in();
         updateStatus();
+        session.touch();
         break;
       case 'zoom:out':
         zoom.out();
         updateStatus();
-        break;
-      case 'theme:set':
-        void theme.set((msg.value as ThemePref) ?? 'light');
-        break;
-      case 'theme:cycle':
-        void theme.cycle();
+        session.touch();
         break;
       case 'zoom:reset':
         zoom.reset();
         updateStatus();
+        session.touch();
         break;
     }
   });
@@ -458,14 +506,14 @@ async function boot(): Promise<void> {
   });
 
   installAltOverlay();
-  const banners = createBanners(document.getElementById('banners')!);
   installWatching({ store, editor, banners, note, saveAs, closeTab, switchTo });
 
-  // ---- Start ----
+  // ---- Start: restore the last session, then any files given on the command line ----
+  const restored = await session.restore();
   const startup = await window.md.getStartupFiles();
   if (startup.length > 0) {
     openFiles(await Promise.all(startup.map((p) => window.md.files.read(p))));
-  } else {
+  } else if (!restored) {
     newTab();
   }
   updateStatus();

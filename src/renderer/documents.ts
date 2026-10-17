@@ -17,6 +17,8 @@ export interface Doc {
   diskHash: string | null;
   mtimeMs: number | null;
   scrollTop: number;
+  /** Stable id for the draft file in userData/drafts (step 6). */
+  draftId: string;
 }
 
 export interface ClosedDoc {
@@ -67,7 +69,10 @@ export class DocStore {
   }
 
   add(
-    doc: Omit<Doc, 'id' | 'dirty' | 'scrollTop'> & { dirty?: boolean },
+    doc: Omit<Doc, 'id' | 'dirty' | 'scrollTop' | 'draftId'> & {
+      dirty?: boolean;
+      draftId?: string;
+    },
     activate = true,
   ): Doc {
     const full: Doc = {
@@ -75,6 +80,7 @@ export class DocStore {
       id: String(nextId++),
       dirty: doc.dirty ?? false,
       scrollTop: 0,
+      draftId: doc.draftId ?? crypto.randomUUID(),
     };
     this.docs.set(full.id, full);
     this.order.push(full.id);

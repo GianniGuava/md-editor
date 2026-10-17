@@ -440,3 +440,15 @@ Step 5 (themes) is done.
 - **CI gate** (`src/renderer/styles/tokens.test.ts`): parses `tokens.css` and asserts all 17 pairs per theme (51 assertions) at 4.5:1 / 3:1, and 7:1 text for High contrast, on every `npm test` run (D-25; Sandnes 2016).
 - Persistence is still localStorage until step 6 moves it into `session.json`.
 - Not verified by hand: visual appearance of Dark and High contrast; only the ratios are machine-checked.
+
+## 18. Step 6 log (2026-10-16)
+
+Step 6 (session state) is done; verified live: a launch with a file, a forced stop, then a launch with no arguments reopened the same tab, and `session.json` carried the window bounds.
+
+- **Store** (`src/main/session.ts`): `session.json` in userData with `version`, UI state (theme, pane mode, split, font size, markup colouring, scroll sync), window bounds, tabs (path, name, selection anchor/head, scroll, dirty, draft id), active index, last ten closed. Written atomically (temp, fsync, rename). Unknown versions or corrupt files are ignored, never deleted. Drafts live in `userData/drafts/<uuid>.md`; ids are validated as UUIDs so a path can never be injected. Five tests.
+- **Capture** (`src/renderer/session.ts`): debounced 500 ms after any text, cursor, scroll, tab, layout, zoom or theme change; immediate on window blur and before close. Dirty documents get their text written to a draft on the same debounce (only when it changed); drafts are deleted when the document becomes clean or is closed, and unreferenced drafts are pruned at startup (D-23, R-12; Jones & Martin 2003; Iqbal & Horvitz 2007).
+- **Restore** (D-22; Czerwinski et al. 2004; Mark et al. 2005; Iqbal & Horvitz 2007; Trafton et al. 2003): tabs reopen in order with selection and scroll; the draft, if any, becomes the buffer and a "Recovered unsaved changes" banner offers to discard it; a missing file with a draft shows the draft plus a danger banner; a missing file with no draft is reported and skipped. UI state is re-applied before documents load. Files given on the command line open after the restore and become active.
+- **Window bounds** are restored only when they intersect a connected display's work area, otherwise defaults apply; maximised state is restored.
+- The `main` process keeps the last renderer snapshot so a resize or move alone updates the file without the renderer's help.
+- ENGINEERING values without a source: 500 ms debounce; ten closed tabs; 500 ms bounds debounce.
+- Not verified by hand: draft recovery after a crash with unsaved text (unit-tested write/read/delete only); the "Discard recovered changes" action.

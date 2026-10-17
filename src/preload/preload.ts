@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { CloseDecision, FileData } from '../main/files';
+import type { SessionData } from '../main/session';
 
 /**
  * The typed bridge between the sandboxed renderer and the main process.
@@ -92,6 +93,18 @@ const api = {
   },
   onSystemTheme: (cb: (info: { dark: boolean }) => void) =>
     on<{ dark: boolean }>('theme:system', cb),
+
+  session: {
+    load: (): Promise<SessionData | null> => ipcRenderer.invoke('session:load'),
+    save: (data: SessionData): Promise<void> =>
+      ipcRenderer.invoke('session:save', data),
+    writeDraft: (id: string, text: string): Promise<void> =>
+      ipcRenderer.invoke('draft:write', { id, text }),
+    readDraft: (id: string): Promise<string | null> =>
+      ipcRenderer.invoke('draft:read', id),
+    deleteDraft: (id: string): Promise<void> =>
+      ipcRenderer.invoke('draft:delete', id),
+  },
 
   /** The one modal dialog (D-21). */
   confirmClose: (name: string): Promise<CloseDecision> =>

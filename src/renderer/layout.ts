@@ -41,6 +41,7 @@ export function createLayout(root: HTMLElement): LayoutHandle {
     split = Math.round(Math.max(MIN, Math.min(MAX, pct)));
     panes.style.setProperty('--split', `${split}%`);
     splitter.setAttribute('aria-valuenow', String(split));
+    listeners.forEach((cb) => cb(mode));
   };
 
   // Pointer drag

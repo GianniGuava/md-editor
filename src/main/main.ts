@@ -1,4 +1,11 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  nativeTheme,
+  screen,
+  shell,
+} from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
@@ -6,6 +13,16 @@ import { buildMenu, type MenuState } from './menu';
 import type { ThemePref } from '../preload/preload';
 import { registerFileHandlers } from './files';
 import { startWatching, stopAllWatchers, stopWatching } from './watcher';
+import {
+  deleteDraft,
+  loadSession,
+  pruneDrafts,
+  readDraft,
+  saveSession,
+  writeDraft,
+  type SessionData,
+  type SessionWindow,
+} from './session';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -24,6 +41,22 @@ if (!app.isPackaged) {
 
 let mainWindow: BrowserWindow | null = null;
 let closingConfirmed = false;
+let lastSession: SessionData | null = null;
+const userData = () => app.getPath('userData');
+
+const windowState = (): SessionWindow | undefined => {
+  if (!mainWindow) return undefined;
+  const b = mainWindow.getNormalBounds();
+  return { ...b, maximized: mainWindow.isMaximized() };
+};
+let boundsTimer: NodeJS.Timeout | undefined;
+const scheduleBoundsSave = () => {
+  clearTimeout(boundsTimer);
+  boundsTimer = setTimeout(() => {
+    if (lastSession)
+      void saveSession(userData(), { ...lastSession, window: windowState() });
+  }, 500);
+};
 const menuState: MenuState = { theme: 'light' };
 
 /** Markdown-looking paths on the command line (double-click / "Open with"). */
@@ -42,9 +75,27 @@ const startupFiles = process.argv
  *  - the Content-Security-Policy lives in index.html.
  */
 const createWindow = (): BrowserWindow => {
+  // Restore window bounds only if they still fall on a connected display (D-22).
+  const saved = loadSession(userData());
+  lastSession = saved;
+  let bounds: Partial<SessionWindow> = {};
+  if (saved?.window) {
+    const { x, y, width, height } = saved.window;
+    const a = screen.getDisplayMatching({ x, y, width, height }).workArea;
+    if (
+      x < a.x + a.width &&
+      x + width > a.x &&
+      y < a.y + a.height &&
+      y + height > a.y
+    ) {
+      bounds = { x, y, width, height };
+    }
+  }
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: bounds.width ?? 1200,
+    height: bounds.height ?? 800,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 640,
     minHeight: 400,
     title: 'MD',
@@ -61,7 +112,12 @@ const createWindow = (): BrowserWindow => {
   });
   mainWindow = win;
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (saved?.window?.maximized) win.maximize();
+    win.show();
+  });
+  win.on('resize', scheduleBoundsSave);
+  win.on('move', scheduleBoundsSave);
   win.on('closed', () => {
     mainWindow = null;
     void stopAllWatchers();
@@ -139,6 +195,23 @@ ipcMain.handle('app:closeNow', () => {
   mainWindow?.close();
 });
 registerFileHandlers(() => mainWindow);
+ipcMain.handle('session:load', () => {
+  const data = loadSession(userData());
+  void pruneDrafts(
+    userData(),
+    new Set((data?.tabs ?? []).flatMap((t) => (t.draft ? [t.draft] : []))),
+  );
+  return data;
+});
+ipcMain.handle('session:save', async (_e, data: SessionData) => {
+  lastSession = { ...data, window: windowState() ?? lastSession?.window };
+  await saveSession(userData(), lastSession);
+});
+ipcMain.handle('draft:write', (_e, a: { id: string; text: string }) =>
+  writeDraft(userData(), a.id, a.text),
+);
+ipcMain.handle('draft:read', (_e, id: string) => readDraft(userData(), id));
+ipcMain.handle('draft:delete', (_e, id: string) => deleteDraft(userData(), id));
 ipcMain.handle('watch:start', (_e, p: string) =>
   startWatching(p, () => mainWindow),
 );
