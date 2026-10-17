@@ -32,11 +32,16 @@ export type AppCommand =
   | 'scrollSync'
   | 'zoom:in'
   | 'zoom:out'
-  | 'zoom:reset';
+  | 'zoom:reset'
+  | 'theme:set'
+  | 'theme:cycle';
+
+export type ThemePref = 'light' | 'dark' | 'hc' | 'system';
 
 export interface AppCommandMessage {
   name: AppCommand;
   checked?: boolean;
+  value?: string;
 }
 
 const on = <T>(channel: string, cb: (payload: T) => void): (() => void) => {
@@ -79,6 +84,14 @@ const api = {
     on<{ path: string }>('file:removed', cb),
   onWatchError: (cb: (info: { path: string; message: string }) => void) =>
     on<{ path: string; message: string }>('file:watchError', cb),
+
+  theme: {
+    /** Reports the preference; main updates the menu and native dialogs and returns the OS value. */
+    set: (pref: ThemePref): Promise<{ dark: boolean }> =>
+      ipcRenderer.invoke('theme:set', pref),
+  },
+  onSystemTheme: (cb: (info: { dark: boolean }) => void) =>
+    on<{ dark: boolean }>('theme:system', cb),
 
   /** The one modal dialog (D-21). */
   confirmClose: (name: string): Promise<CloseDecision> =>

@@ -16,7 +16,8 @@ import { readTextFile, type FileData } from './files';
 
 const watchers = new Map<string, FSWatcher>();
 
-const isNetworkPath = (p: string) => p.startsWith('\\') || p.startsWith('//');
+// UNC paths: \\server\share or //server/share
+const isNetworkPath = (p: string) => p.startsWith('\\\\') || p.startsWith('//');
 
 export function startWatching(
   p: string,

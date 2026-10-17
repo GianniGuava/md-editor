@@ -429,3 +429,14 @@ Step 4 (watch and reload) is done; verified live: a file opened from the command
 - **Banners** (`src/renderer/banners.ts`): polite live region between toolbar and workspace, labelled buttons, Escape dismisses, banners for closed tabs are removed automatically.
 - ENGINEERING values without a source: 200 ms write-stability threshold; 8 s status-note lifetime; 4,000-line diff cap.
 - Not verified by hand: the dirty-buffer banner path and the removed-file path were exercised by code review and unit tests only (the live test covered the clean-buffer reload).
+
+## 17. Step 5 log (2026-10-16)
+
+Step 5 (themes) is done.
+
+- **Four choices** in View › Theme (radio items) and Ctrl+Shift+L to cycle: Light (default, D-10), Dark, High contrast (AAA, R-6), System. "System" follows Electron's `nativeTheme`, which mirrors `prefers-color-scheme` (STANDARD Media Queries 5 §12.5); the OS value is re-read whenever the preference changes and whenever the OS theme changes.
+- **Service** (`src/renderer/theme.ts`): sets `data-theme` on `<html>`, reports the preference to main, which rebuilds the menu's radio state and sets `nativeTheme.themeSource` so native dialogs and scrollbars match (High contrast counts as light for the OS).
+- **Tokens stay the single source**: themes are the three blocks in `tokens.css` (the plan's "JSON token files" became CSS blocks; same content, one fewer build step). `tools/contrast_check.py` remains for ad-hoc use.
+- **CI gate** (`src/renderer/styles/tokens.test.ts`): parses `tokens.css` and asserts all 17 pairs per theme (51 assertions) at 4.5:1 / 3:1, and 7:1 text for High contrast, on every `npm test` run (D-25; Sandnes 2016).
+- Persistence is still localStorage until step 6 moves it into `session.json`.
+- Not verified by hand: visual appearance of Dark and High contrast; only the ratios are machine-checked.

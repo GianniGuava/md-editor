@@ -9,6 +9,7 @@ import { DocStore, type Doc } from './documents';
 import { createTabBar } from './tabs';
 import { installAltOverlay } from './altKeys';
 import { createBanners } from './banners';
+import { createTheme, type ThemePref } from './theme';
 import { installWatching } from './watching';
 import { SAMPLE } from './sample';
 import type { FileData } from '../preload/preload';
@@ -63,8 +64,10 @@ async function boot(): Promise<void> {
   const info = await window.md.getInfo();
   console.log('[md] renderer bridge ok', JSON.stringify(info));
 
-  // Light is the default (D-10); "system" resolution comes with step 5.
-  document.documentElement.dataset.theme = 'light';
+  // Light is the default (D-10). The service reports the preference to main (menu, dialogs).
+  const theme = createTheme();
+  await theme.set(theme.get());
+  window.md.onSystemTheme(({ dark }) => theme.systemChanged(dark));
 
   const zoom = createZoom();
   const store = new DocStore();
@@ -408,6 +411,12 @@ async function boot(): Promise<void> {
       case 'zoom:out':
         zoom.out();
         updateStatus();
+        break;
+      case 'theme:set':
+        void theme.set((msg.value as ThemePref) ?? 'light');
+        break;
+      case 'theme:cycle':
+        void theme.cycle();
         break;
       case 'zoom:reset':
         zoom.reset();

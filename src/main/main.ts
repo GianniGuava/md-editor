@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
-import { buildMenu } from './menu';
+import { buildMenu, type MenuState } from './menu';
+import type { ThemePref } from '../preload/preload';
 import { registerFileHandlers } from './files';
 import { startWatching, stopAllWatchers, stopWatching } from './watcher';
 
@@ -23,6 +24,7 @@ if (!app.isPackaged) {
 
 let mainWindow: BrowserWindow | null = null;
 let closingConfirmed = false;
+const menuState: MenuState = { theme: 'light' };
 
 /** Markdown-looking paths on the command line (double-click / "Open with"). */
 const startupFiles = process.argv
@@ -106,7 +108,7 @@ const createWindow = (): BrowserWindow => {
     );
   }
 
-  buildMenu(win);
+  buildMenu(win, menuState);
   return win;
 };
 
@@ -118,6 +120,20 @@ ipcMain.handle('app:getInfo', () => ({
   systemTheme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
 }));
 ipcMain.handle('app:getStartupFiles', () => startupFiles);
+ipcMain.handle('theme:set', (_e, pref: ThemePref) => {
+  menuState.theme = pref;
+  // Native dialogs, scrollbars and the window background follow the chosen theme;
+  // "hc" is a light theme for the OS's purposes.
+  nativeTheme.themeSource =
+    pref === 'system' ? 'system' : pref === 'dark' ? 'dark' : 'light';
+  if (mainWindow) buildMenu(mainWindow, menuState);
+  return { dark: nativeTheme.shouldUseDarkColors };
+});
+nativeTheme.on('updated', () => {
+  mainWindow?.webContents.send('theme:system', {
+    dark: nativeTheme.shouldUseDarkColors,
+  });
+});
 ipcMain.handle('app:closeNow', () => {
   closingConfirmed = true;
   mainWindow?.close();

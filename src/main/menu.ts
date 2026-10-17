@@ -4,14 +4,18 @@ import {
   Menu,
   type MenuItemConstructorOptions,
 } from 'electron';
-import type { AppCommandMessage } from '../preload/preload';
+import type { AppCommandMessage, ThemePref } from '../preload/preload';
 
 /**
  * Application menu. Every command shows its accelerator (D-16: Lane et al. 2005,
  * Grossman et al. 2007). Commands reach the renderer as `app:command` messages;
  * Ctrl+1..9 tab jumps are handled in the renderer and listed in Help.
  */
-export function buildMenu(win: BrowserWindow): void {
+export interface MenuState {
+  theme: ThemePref;
+}
+
+export function buildMenu(win: BrowserWindow, state: MenuState): void {
   const send = (msg: AppCommandMessage) =>
     win.webContents.send('app:command', msg);
   const cmd = (
@@ -73,6 +77,29 @@ export function buildMenu(win: BrowserWindow): void {
           type: 'checkbox',
           checked: true,
           click: (item) => send({ name: 'scrollSync', checked: item.checked }),
+        },
+        { type: 'separator' },
+        {
+          label: '&Theme',
+          submenu: [
+            ...(
+              [
+                ['&Light (default)', 'light'],
+                ['&Dark', 'dark'],
+                ['&High contrast', 'hc'],
+                ['&System', 'system'],
+              ] as [string, ThemePref][]
+            ).map(
+              ([label, value]): MenuItemConstructorOptions => ({
+                label,
+                type: 'radio',
+                checked: state.theme === value,
+                click: () => send({ name: 'theme:set', value }),
+              }),
+            ),
+            { type: 'separator' },
+            cmd('&Cycle theme', 'theme:cycle', 'CmdOrCtrl+Shift+L'),
+          ],
         },
         { type: 'separator' },
         cmd('Zoom &in', 'zoom:in', 'CmdOrCtrl+='),
