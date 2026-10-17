@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
+import { buildMenu } from './menu';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -78,9 +79,7 @@ const createWindow = (): BrowserWindow => {
     );
   }
 
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
+  buildMenu(mainWindow);
 
   return mainWindow;
 };

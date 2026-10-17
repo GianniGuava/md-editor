@@ -12,8 +12,28 @@ export interface AppInfo {
   systemTheme: 'light' | 'dark';
 }
 
+export interface ViewCommandMessage {
+  name:
+    | 'mode:editor'
+    | 'mode:split'
+    | 'mode:preview'
+    | 'highlight'
+    | 'scrollSync'
+    | 'zoom:in'
+    | 'zoom:out'
+    | 'zoom:reset';
+  checked?: boolean;
+}
+
 const api = {
   getInfo: (): Promise<AppInfo> => ipcRenderer.invoke('app:getInfo'),
+  /** Menu commands from the main process. Returns an unsubscribe function. */
+  onViewCommand: (cb: (msg: ViewCommandMessage) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, msg: ViewCommandMessage) =>
+      cb(msg);
+    ipcRenderer.on('view:command', listener);
+    return () => ipcRenderer.removeListener('view:command', listener);
+  },
 };
 
 export type MdApi = typeof api;

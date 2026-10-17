@@ -1,0 +1,209 @@
+/* Application layout and preview typography. Tokens only; no colour literals. */
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+
+/* ---- Toolbar (D-7 targets, D-15 labels, D-19 grouping by spacing) ---- */
+#chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85em;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.toolbar-group + .toolbar-group {
+  margin-left: var(--space-3);
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--target-min);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tool[aria-pressed='true'],
+.tool[aria-checked='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.tool .glyph {
+  font-family: var(--font-editor);
+  opacity: 0.8;
+}
+
+/* ---- Panes ---- */
+#workspace {
+  min-height: 0;
+}
+
+#panes {
+  display: grid;
+  height: 100%;
+  grid-template-columns: var(--split) 8px 1fr;
+}
+
+#panes[data-mode='editor'] {
+  grid-template-columns: 1fr 0 0;
+}
+
+#panes[data-mode='preview'] {
+  grid-template-columns: 0 0 1fr;
+}
+
+#panes[data-mode='editor'] #preview-pane,
+#panes[data-mode='editor'] #splitter,
+#panes[data-mode='preview'] #editor-pane,
+#panes[data-mode='preview'] #splitter {
+  display: none;
+}
+
+#editor-pane,
+#preview-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#editor-pane:focus-within {
+  box-shadow: inset 0 0 0 var(--focus-width) var(--focus);
+}
+
+#splitter {
+  background: var(--surface2);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+}
+
+#splitter:focus-visible {
+  outline-offset: 0;
+}
+
+/* ---- Preview typography (D-2 measure, D-3 leading, D-4 left-aligned, D-5 sans) ---- */
+#preview-pane {
+  position: relative;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.preview-body {
+  max-width: var(--measure);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-ui);
+  text-align: left;
+  hyphens: none;
+  overflow-wrap: anywhere;
+}
+
+/* Heading scale is an ENGINEERING choice (no source for exact ratios); kept modest. */
+.preview-body h1 {
+  font-size: 1.6em;
+  margin: 0.8em 0 0.4em;
+}
+.preview-body h2 {
+  font-size: 1.35em;
+  margin: 1em 0 0.4em;
+}
+.preview-body h3 {
+  font-size: 1.15em;
+  margin: 1em 0 0.3em;
+}
+.preview-body h4,
+.preview-body h5,
+.preview-body h6 {
+  font-size: 1em;
+  margin: 1em 0 0.3em;
+}
+
+.preview-body p,
+.preview-body ul,
+.preview-body ol,
+.preview-body table,
+.preview-body pre,
+.preview-body blockquote {
+  margin: 0 0 1em;
+}
+
+.preview-body code,
+.preview-body pre {
+  font-family: var(--font-editor);
+  font-size: 0.92em;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.preview-body code {
+  padding: 0 0.25em;
+}
+
+.preview-body pre {
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+
+.preview-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.preview-body blockquote {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border);
+  color: var(--text2);
+}
+
+.preview-body table {
+  border-collapse: collapse;
+}
+
+.preview-body th,
+.preview-body td {
+  border: 1px solid var(--border);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
+.preview-body th {
+  background: var(--surface);
+}
+
+.preview-body img {
+  max-width: 100%;
+}
+
+.preview-body hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* ---- Status bar ---- */
+#status {
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface2);
+  border-top: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 0.8em;
+}

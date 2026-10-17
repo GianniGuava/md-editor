@@ -388,3 +388,18 @@ Step 1 (scaffold and security baseline) is done and launches. Outcomes and devia
 - **Step 8 deviation:** Forge's Windows maker is Squirrel, not the electron-builder NSIS installer named in step 8. Both produce a per-user installer; switching later is a config change. REVIEW R-17: keep Squirrel (recommended, already wired) or switch to electron-builder.
 - **Observed on this machine:** the OS theme is dark (`nativeTheme.shouldUseDarkColors` = true), so the "System" theme option will resolve to Dark here; Light remains the app default per D-10. The Claude desktop app probes `localhost:5173` while a dev server runs; the renderer now shows a plain message when opened outside Electron.
 - **Checks passing:** `npx tsc --noEmit`, `npx oxlint`, `npx oxfmt --check` (scoped to code; prose and tools are excluded in `.oxfmtrc.json`), `tools/contrast_check.py` (3 themes).
+
+## 14. Step 2 log (2026-10-16)
+
+Step 2 (editor core) is done and verified in a live launch. What exists now:
+
+- **Editor** (`src/renderer/editor.ts`): CodeMirror 6, Markdown language with fenced-code languages, line wrapping, line numbers, linear history (D-20). Markup colouring is a `Compartment` so it can be switched off (D-11); it uses only tokens (bold headings, `--link` for links, `--surface` for code, `--text2` for markers).
+- **Preview** (`src/renderer/preview.ts`): markdown-it (html on, linkify on) → DOMPurify with `style`, `form`, `input`, `button` forbidden; every opening block token and fenced block carries `data-line` for scroll sync. Four Vitest tests cover CommonMark, script/handler/`javascript:` stripping, forbidden tags and line tagging (`npm test`).
+- **Layout** (`src/renderer/layout.ts`): grid with `--split`, modes editor/split/preview (D-14), splitter as an ARIA separator (drag, arrow keys ±2 %, Shift ±10 %, Home/End), 20–80 % clamp.
+- **Scroll sync** (`src/renderer/scrollSync.ts`): block-start alignment in both directions with a 120 ms lock against feedback; switchable (H-10).
+- **Zoom** (`src/renderer/zoom.ts`): 12–32 px in 2 px steps on `--font-size`, default 18 (R-3); stored in localStorage until step 6.
+- **Menu** (`src/main/menu.ts`): File, Edit (roles), View with accelerators shown beside every command (D-16); checkbox items for markup colouring and scroll sync; DevTools entry in development only. Commands reach the renderer through `window.md.onViewCommand`.
+- **Toolbar**: pane-mode group and options group, icon glyph plus visible label (D-15), tooltips carrying the shortcut (D-16), `aria-pressed` state, 32 px targets (D-7).
+- **Status bar**: line, column, word count, zoom size, `aria-live="polite"`.
+- Deferred to step 3: file open/save and the document model (the editor shows a sample document); the detached DevTools auto-open was removed in favour of the View menu entry.
+- ENGINEERING choices without a source: heading size ratios in `app.css`; 100 ms render debounce; 120 ms scroll-sync lock; splitter step sizes.
