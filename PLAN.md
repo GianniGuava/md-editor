@@ -373,3 +373,18 @@ Move-Item "C:/Users/giann/Repo Scraping/md-editor" "C:/Users/giann/md-editor"
 ```
 
 then `git init` inside the new location. The contrast checker and literature folder move with it unchanged.
+
+---
+
+## 13. Step 1 log (2026-10-16)
+
+Step 1 (scaffold and security baseline) is done and launches. Outcomes and deviations, all ENGINEERING unless tagged:
+
+- **Toolchain as generated:** Electron Forge 8.0.1 with the Vite + TypeScript template (Electron 44.8.0, Vite 8, TypeScript 6, oxlint/oxfmt). The old `--template=vite-typescript` flag no longer exists; the current form is `--template=vite --typescript`.
+- **Layout:** `src/main/main.ts`, `src/preload/preload.ts`, `src/renderer/index.ts` + `src/renderer/styles/{tokens,base}.css`, `index.html` at the root. Entry files must keep distinct basenames: naming both `index.ts` made Vite write both bundles to one `index.cjs`, Electron then quit at launch with an error dialog.
+- **Security baseline in place:** contextIsolation, sandbox, no nodeIntegration, navigation and window.open refused (http links go to the OS browser), typed `window.md` bridge from the preload, Content-Security-Policy meta in `index.html` (`style-src 'unsafe-inline'` is needed by Vite's dev injection; tighten for packaged builds in step 8).
+- **Tokens:** all three themes (light, dark, hc) and the forced-colours fallback live in `tokens.css`; `base.css` applies focus ring, selection, 32 px targets and reduced-motion.
+- **Dev profile:** in development Chromium's user-data directory is `<project>/.dev-userdata/` (gitignored, excluded from Vite's watcher) so a sandboxed shell never writes to `%APPDATA%`. Packaged builds use Electron's default location.
+- **Step 8 deviation:** Forge's Windows maker is Squirrel, not the electron-builder NSIS installer named in step 8. Both produce a per-user installer; switching later is a config change. REVIEW R-17: keep Squirrel (recommended, already wired) or switch to electron-builder.
+- **Observed on this machine:** the OS theme is dark (`nativeTheme.shouldUseDarkColors` = true), so the "System" theme option will resolve to Dark here; Light remains the app default per D-10. The Claude desktop app probes `localhost:5173` while a dev server runs; the renderer now shows a plain message when opened outside Electron.
+- **Checks passing:** `npx tsc --noEmit`, `npx oxlint`, `npx oxfmt --check` (scoped to code; prose and tools are excluded in `.oxfmtrc.json`), `tools/contrast_check.py` (3 themes).

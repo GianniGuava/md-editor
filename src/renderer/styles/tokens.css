@@ -1,0 +1,102 @@
+/*
+ * Colour tokens — the only place a colour literal may appear in the renderer.
+ * Every pair is verified by tools/contrast_check.py against WCAG 2.2:
+ *   1.4.3 text >= 4.5:1 (High contrast theme: 7:1, SC 1.4.6)
+ *   1.4.11 UI component boundaries and focus indicators >= 3:1
+ * See PLAN.md §7 for the ratios and §8 (D-10, D-12, D-13, D-25) for the sources.
+ * Theme selection: <html data-theme="light|dark|hc">; "system" is resolved by the
+ * main process from nativeTheme (mirrors prefers-color-scheme, Media Queries 5 §12.5).
+ */
+
+:root,
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --surface: #f2f2f2;
+  --surface2: #e6e6e6;
+  --text: #1a1a1a;
+  --text2: #595959;
+  --border: #767676;
+  --accent: #0b57d0;
+  --on-accent: #ffffff;
+  --link: #0b57d0;
+  --focus: #0b57d0;
+  --selection: #cce0ff;
+  --disabled: #8c8c8c;
+  --danger: #b3261e; /* destructive buttons and error banners only (R-8) */
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #121212;
+  --surface: #1e1e1e;
+  --surface2: #2a2a2a;
+  --text: #e6e6e6;
+  --text2: #a6a6a6;
+  --border: #6e6e6e;
+  --accent: #2d6fe0;
+  --on-accent: #ffffff;
+  --link: #8ab4f8;
+  --focus: #8ab4f8;
+  --selection: #1f3a6b;
+  --disabled: #7a7a7a;
+  --danger: #f2b8b5;
+  color-scheme: dark;
+}
+
+/* High contrast: AAA 7:1 for all text (R-6) */
+:root[data-theme='hc'] {
+  --bg: #ffffff;
+  --surface: #f2f2f2;
+  --surface2: #e6e6e6;
+  --text: #000000;
+  --text2: #3d3d3d;
+  --border: #595959;
+  --accent: #0041a8;
+  --on-accent: #ffffff;
+  --link: #0041a8;
+  --focus: #0041a8;
+  --selection: #cce0ff;
+  --disabled: #767676;
+  --danger: #8f0000;
+  color-scheme: light;
+}
+
+/* Spacing and sizing (D-7, D-19; the 8 px step is convention, H-4) */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --target-min: 32px; /* above the 24 px floor of WCAG 2.5.8 */
+  --focus-width: 2px; /* WCAG 2.4.13 perimeter */
+  --focus-offset: 2px;
+  --radius: 4px;
+}
+
+/* Typography (D-1..D-6; R-3, R-4) */
+:root {
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
+  --font-editor: 'Cascadia Mono', Consolas, monospace;
+  --font-size: 18px;
+  --line-height: 1.5;
+  --measure: 70ch;
+}
+
+/* Windows forced-colours mode: let the OS palette win (Step 9.2) */
+@media (forced-colors: active) {
+  :root {
+    --bg: Canvas;
+    --surface: Canvas;
+    --surface2: Canvas;
+    --text: CanvasText;
+    --text2: CanvasText;
+    --border: CanvasText;
+    --accent: Highlight;
+    --on-accent: HighlightText;
+    --link: LinkText;
+    --focus: Highlight;
+    --selection: Highlight;
+    --disabled: GrayText;
+    --danger: CanvasText;
+  }
+}

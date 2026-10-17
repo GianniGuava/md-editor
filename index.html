@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Content-Security-Policy (PLAN.md step 1.2, ENGINEERING).
+         'unsafe-inline' for styles is needed by Vite's dev-server style injection;
+         scripts are never inline. connect-src allows Vite HMR websockets in dev only. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MD</title>
+  </head>
+  <body>
+    <header role="banner" aria-label="Tabs and toolbar" id="chrome"></header>
+    <main id="workspace" aria-label="Editor and preview">
+      <p>MD scaffold. Editor arrives in step 2.</p>
+    </main>
+    <footer role="status" id="status" aria-live="polite"></footer>
+    <script type="module" src="/src/renderer/index.ts"></script>
+  </body>
+</html>

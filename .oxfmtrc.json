@@ -1,0 +1,14 @@
+{
+  "singleQuote": true,
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "PLAN.md",
+    "literature/**",
+    "tools/**",
+    "assets/**",
+    "node_modules/**",
+    ".vite/**",
+    "out/**"
+  ]
+}

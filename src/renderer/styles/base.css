@@ -1,0 +1,69 @@
+@import './tokens.css';
+
+/* Baseline rules that every screen inherits. No colour literals here: tokens only. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Visible focus on every keyboard-operable control (WCAG 2.4.7; 2.4.13 perimeter and offset, D-13) */
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset);
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--text);
+}
+
+a {
+  color: var(--link);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Minimum pointer target (WCAG 2.5.8 floor is 24 px; we use 32 px, D-7) */
+button,
+[role='button'],
+[role='tab'] {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+}
+
+[aria-disabled='true'],
+:disabled {
+  color: var(--disabled);
+  cursor: not-allowed;
+}
+
+/* Reduced motion honoured (Step 5.5) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
