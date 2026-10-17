@@ -9,6 +9,7 @@
     "assets/**",
     "node_modules/**",
     ".vite/**",
-    "out/**"
+    "out/**",
+    "README.md"
   ]
 }
