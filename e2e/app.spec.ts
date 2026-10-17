@@ -112,6 +112,11 @@ test('opens a file, edits in a new tab, switches panes, restores the session', a
       'data-mode',
       'preview',
     );
+    // The pane must actually take the width (regression: it once landed in a 0 px column).
+    const box = await page.locator('#preview-pane').boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(300);
+    await expect(page.locator('#preview-pane h1')).toBeVisible();
+    await expect(page.locator('#editor-pane')).toBeHidden();
     await page.getByRole('button', { name: /^Split/ }).click();
     await expect(page.locator('#panes')).toHaveAttribute('data-mode', 'split');
 
