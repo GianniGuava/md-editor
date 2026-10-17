@@ -3,7 +3,7 @@
   "productName": "MD",
   "version": "0.1.0",
   "private": true,
-  "description": "MD \u2014 a tabbed Markdown editor for Windows (see PLAN.md)",
+  "description": "MD — a tabbed Markdown editor for Windows (see PLAN.md)",
   "keywords": [
     "markdown",
     "editor",
