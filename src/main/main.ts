@@ -225,7 +225,12 @@ ipcMain.handle('watch:stop', (_e, p: string) => stopWatching(p));
 // Auto-update (PLAN.md step 10 / distribution): installed Squirrel builds poll
 // update.electronjs.org for newer GitHub releases of the public repo. Inert in
 // development and in portable (non-Squirrel) copies; failures are logged, never shown.
-if (app.isPackaged) {
+// Squirrel installs put Update.exe one level above the versioned app folder; portable
+// copies (out/MD-win32-x64) have none and would only log "Can not find Squirrel".
+const installedBySquirrel = fs.existsSync(
+  path.join(path.dirname(process.execPath), '..', 'Update.exe'),
+);
+if (app.isPackaged && installedBySquirrel) {
   try {
     updateElectronApp({
       repo: 'GianniGuava/md-editor',
