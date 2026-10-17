@@ -270,12 +270,11 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   grid-template-columns: var(--split) 8px 1fr;
 }
 
-#panes[data-mode='editor'] {
-  grid-template-columns: 1fr 0 0;
-}
-
+/* Single-pane modes use a one-column grid: with the other items hidden, the
+   remaining pane auto-places into the first column, so that column must be 1fr. */
+#panes[data-mode='editor'],
 #panes[data-mode='preview'] {
-  grid-template-columns: 0 0 1fr;
+  grid-template-columns: 1fr;
 }
 
 #panes[data-mode='editor'] #preview-pane,
