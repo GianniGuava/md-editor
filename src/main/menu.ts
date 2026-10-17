@@ -4,34 +4,41 @@ import {
   Menu,
   type MenuItemConstructorOptions,
 } from 'electron';
+import type { AppCommandMessage } from '../preload/preload';
 
 /**
  * Application menu. Every command shows its accelerator (D-16: Lane et al. 2005,
- * Grossman et al. 2007). Commands reach the renderer as `view:command` messages.
+ * Grossman et al. 2007). Commands reach the renderer as `app:command` messages;
+ * Ctrl+1..9 tab jumps are handled in the renderer and listed in Help.
  */
-export type ViewCommand =
-  | 'mode:editor'
-  | 'mode:split'
-  | 'mode:preview'
-  | 'highlight'
-  | 'scrollSync'
-  | 'zoom:in'
-  | 'zoom:out'
-  | 'zoom:reset';
-
-export interface ViewCommandMessage {
-  name: ViewCommand;
-  checked?: boolean;
-}
-
 export function buildMenu(win: BrowserWindow): void {
-  const send = (msg: ViewCommandMessage) =>
-    win.webContents.send('view:command', msg);
+  const send = (msg: AppCommandMessage) =>
+    win.webContents.send('app:command', msg);
+  const cmd = (
+    label: string,
+    name: AppCommandMessage['name'],
+    accelerator?: string,
+  ): MenuItemConstructorOptions => ({
+    label,
+    accelerator,
+    click: () => send({ name }),
+  });
 
   const template: MenuItemConstructorOptions[] = [
     {
       label: '&File',
-      submenu: [{ role: 'quit', label: 'E&xit', accelerator: 'Alt+F4' }],
+      submenu: [
+        cmd('&New tab', 'file:new', 'CmdOrCtrl+T'),
+        cmd('&Open…', 'file:open', 'CmdOrCtrl+O'),
+        { type: 'separator' },
+        cmd('&Save', 'file:save', 'CmdOrCtrl+S'),
+        cmd('Save &as…', 'file:saveAs', 'CmdOrCtrl+Shift+S'),
+        { type: 'separator' },
+        cmd('&Close tab', 'tab:close', 'CmdOrCtrl+W'),
+        cmd('&Reopen closed tab', 'tab:reopen', 'CmdOrCtrl+Shift+T'),
+        { type: 'separator' },
+        { role: 'quit', label: 'E&xit', accelerator: 'Alt+F4' },
+      ],
     },
     {
       label: '&Edit',
@@ -48,21 +55,12 @@ export function buildMenu(win: BrowserWindow): void {
     {
       label: '&View',
       submenu: [
-        {
-          label: '&Editor only',
-          accelerator: 'CmdOrCtrl+Shift+E',
-          click: () => send({ name: 'mode:editor' }),
-        },
-        {
-          label: '&Split',
-          accelerator: 'CmdOrCtrl+\\',
-          click: () => send({ name: 'mode:split' }),
-        },
-        {
-          label: '&Preview only',
-          accelerator: 'CmdOrCtrl+Shift+P',
-          click: () => send({ name: 'mode:preview' }),
-        },
+        cmd('&Editor only', 'mode:editor', 'CmdOrCtrl+Shift+E'),
+        cmd('&Split', 'mode:split', 'CmdOrCtrl+\\'),
+        cmd('&Preview only', 'mode:preview', 'CmdOrCtrl+Shift+P'),
+        { type: 'separator' },
+        cmd('Ne&xt tab', 'tab:next', 'Ctrl+Tab'),
+        cmd('Pre&vious tab', 'tab:prev', 'Ctrl+Shift+Tab'),
         { type: 'separator' },
         {
           label: '&Markup colouring',
@@ -77,27 +75,31 @@ export function buildMenu(win: BrowserWindow): void {
           click: (item) => send({ name: 'scrollSync', checked: item.checked }),
         },
         { type: 'separator' },
-        {
-          label: 'Zoom &in',
-          accelerator: 'CmdOrCtrl+=',
-          click: () => send({ name: 'zoom:in' }),
-        },
-        {
-          label: 'Zoom &out',
-          accelerator: 'CmdOrCtrl+-',
-          click: () => send({ name: 'zoom:out' }),
-        },
-        {
-          label: '&Reset zoom',
-          accelerator: 'CmdOrCtrl+0',
-          click: () => send({ name: 'zoom:reset' }),
-        },
+        cmd('Zoom &in', 'zoom:in', 'CmdOrCtrl+='),
+        cmd('Zoom &out', 'zoom:out', 'CmdOrCtrl+-'),
+        cmd('&Reset zoom', 'zoom:reset', 'CmdOrCtrl+0'),
         ...(app.isPackaged
           ? []
           : [
               { type: 'separator' } as MenuItemConstructorOptions,
               { role: 'toggleDevTools' } as MenuItemConstructorOptions,
             ]),
+      ],
+    },
+    {
+      label: '&Help',
+      submenu: [
+        cmd('Open &sample document', 'file:sample'),
+        {
+          label: 'Jump to tab 1–9',
+          sublabel: 'Ctrl+1 … Ctrl+9 (Ctrl+9 is the last tab)',
+          enabled: false,
+        },
+        {
+          label: 'Show shortcuts on commands',
+          sublabel: 'Hold Alt',
+          enabled: false,
+        },
       ],
     },
   ];

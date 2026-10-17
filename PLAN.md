@@ -403,3 +403,18 @@ Step 2 (editor core) is done and verified in a live launch. What exists now:
 - **Status bar**: line, column, word count, zoom size, `aria-live="polite"`.
 - Deferred to step 3: file open/save and the document model (the editor shows a sample document); the detached DevTools auto-open was removed in favour of the View menu entry.
 - ENGINEERING choices without a source: heading size ratios in `app.css`; 100 ms render debounce; 120 ms scroll-sync lock; splitter step sizes.
+
+## 15. Step 3 log (2026-10-16)
+
+Step 3 (tabs, document model, file I/O) is done; verified by a launch that opened a file passed on the command line.
+
+- **Document model** (`src/renderer/documents.ts`): each tab owns a CodeMirror `EditorState` (text, selection, linear undo history, D-20), `savedText`, derived `dirty`, `diskHash`/`mtimeMs` for step 4, `scrollTop`. The store keeps order, the active id and the last ten closed documents for reopen. Five unit tests.
+- **One editor, many states** (`src/renderer/editor.ts`): switching tabs swaps `EditorState`s, so undo history and selection survive per tab; the markup-colouring preference is re-applied on every swap.
+- **Tab bar** (`src/renderer/tabs.ts`): WAI-ARIA tabs (roving tabindex, arrows, Home/End, Enter/Space, Delete closes). Dirty marker is a dot plus visually hidden "(modified)" text (WCAG 1.4.1). Close control at 32 px (D-7). Middle-click closes; drag reorders; the strip scrolls and an "All tabs" listbox appears when it overflows (D-9). Minimum tab width 140 px, maximum 240 px, so titles stay legible rather than shrinking (Dubroy & Balakrishnan 2010).
+- **File I/O** (`src/main/files.ts`): open and save dialogs, read by path, atomic save (temp file, fsync, rename), SHA-256 content hash returned on every read/write for step 4's self-write detection. Two Node tests. Files dropped on the window and paths given on the command line open as tabs. A lone blank untitled tab is replaced when files are opened (ENGINEERING).
+- **Close flow** (D-21, R-13): closing a dirty tab, or the window with dirty tabs, shows the single Save / Don't save / Cancel dialog per dirty document; the window close is intercepted in main and completed only after the renderer reports no cancellation.
+- **Shortcuts**: File menu (Ctrl+T/O/S/Shift+S/W/Shift+T), View menu (Ctrl+Tab / Ctrl+Shift+Tab), Ctrl+1..9 in the renderer (9 = last), all listed in menus or Help (D-16).
+- **Hold-Alt overlay** (R-7): `src/renderer/altKeys.ts` adds `show-keys` after 300 ms; CSS renders each `data-keys` badge on toolbar buttons and the first nine tabs. A plain Alt tap still reaches the Windows menu bar.
+- **Title and status**: window title `name • – MD` when dirty; status bar shows path or "Not saved to disk", line/column, words, zoom.
+- Deferred: tabs are not yet persisted (step 6); the sample document moved to Help › Open sample document.
+- ENGINEERING choices without a source: 10-entry reopen stack; 300 ms Alt hold; 140–240 px tab widths; replacing a blank untitled tab on open.

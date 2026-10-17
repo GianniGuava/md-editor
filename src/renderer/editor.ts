@@ -1,4 +1,4 @@
-import { EditorState, Compartment } from '@codemirror/state';
+import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -18,12 +18,12 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 
 /**
- * CodeMirror 6 editor for Markdown source (PLAN.md step 2.1).
- *  - Linear undo via @codemirror/commands history (D-20, R-10).
+ * CodeMirror 6 editor for Markdown source (PLAN.md step 2.1, multi-document since step 3).
+ * One EditorView is shared by all tabs; each tab owns an EditorState, which carries
+ * its text, selection and linear undo history (D-20). Switching tabs swaps states.
  *  - Line wrapping; monospace via --font-editor (D-6, R-4); size via --font-size (D-1).
- *  - Markup colouring is deliberately subtle and switchable (D-11): evidence for a
- *    comprehension benefit is mixed (Hannebauer 2018 vs Sarkar 2015), so colour is
- *    used for preference, never as the only cue. Every colour is a token from tokens.css.
+ *  - Markup colouring is subtle and switchable (D-11): evidence for a comprehension
+ *    benefit is mixed (Hannebauer 2018 vs Sarkar 2015). Colours are tokens only.
  */
 
 const subtleMarkup = HighlightStyle.define([
@@ -34,7 +34,7 @@ const subtleMarkup = HighlightStyle.define([
   { tag: tags.url, color: 'var(--link)' },
   { tag: tags.monospace, backgroundColor: 'var(--surface)' },
   { tag: tags.quote, color: 'var(--text2)' },
-  { tag: tags.processingInstruction, color: 'var(--text2)' }, // #, *, >, ` markers
+  { tag: tags.processingInstruction, color: 'var(--text2)' },
   { tag: tags.meta, color: 'var(--text2)' },
   { tag: tags.contentSeparator, color: 'var(--text2)' },
 ]);
@@ -72,6 +72,11 @@ const editorTheme = EditorView.theme({
 
 export interface EditorHandle {
   view: EditorView;
+  /** Build a state for a new document (fresh undo history). */
+  createState(text: string): EditorState;
+  getState(): EditorState;
+  /** Swap the displayed document; the previous state is returned for storage. */
+  setState(state: EditorState): EditorState;
   getDoc(): string;
   setHighlight(on: boolean): void;
   /** 1-based number of the first line visible at the top of the editor. */
@@ -80,52 +85,61 @@ export interface EditorHandle {
   scrollToLine(line: number): void;
   /** 1-based line and column of the main cursor. */
   cursor(): { line: number; col: number };
+  focus(): void;
 }
 
 export interface EditorOptions {
   parent: HTMLElement;
-  doc: string;
-  onDocChange: (doc: string) => void;
+  onDocChange: (text: string) => void;
   onCursorChange?: () => void;
 }
 
 export function createEditor(opts: EditorOptions): EditorHandle {
   const highlight = new Compartment();
+  let highlightOn = true;
+  const highlightExt = () =>
+    highlightOn ? syntaxHighlighting(subtleMarkup) : [];
 
-  const state = EditorState.create({
-    doc: opts.doc,
-    extensions: [
-      lineNumbers(),
-      history(),
-      drawSelection(),
-      highlightActiveLine(),
-      EditorView.lineWrapping,
-      markdown({ base: markdownLanguage, codeLanguages: languages }),
-      highlight.of(syntaxHighlighting(subtleMarkup)),
-      editorTheme,
-      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-      EditorView.contentAttributes.of({
-        'aria-label': 'Markdown source',
-        spellcheck: 'false',
-      }),
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged) opts.onDocChange(update.state.doc.toString());
-        if (update.selectionSet || update.docChanged) opts.onCursorChange?.();
-      }),
-    ],
-  });
+  const extensions: Extension = [
+    lineNumbers(),
+    history(),
+    drawSelection(),
+    highlightActiveLine(),
+    EditorView.lineWrapping,
+    markdown({ base: markdownLanguage, codeLanguages: languages }),
+    highlight.of(highlightExt()),
+    editorTheme,
+    keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+    EditorView.contentAttributes.of({
+      'aria-label': 'Markdown source',
+      spellcheck: 'false',
+    }),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged) opts.onDocChange(update.state.doc.toString());
+      if (update.selectionSet || update.docChanged) opts.onCursorChange?.();
+    }),
+  ];
 
-  const view = new EditorView({ state, parent: opts.parent });
+  const createState = (text: string) =>
+    EditorState.create({ doc: text, extensions });
+
+  const view = new EditorView({ state: createState(''), parent: opts.parent });
 
   return {
     view,
+    createState,
+    getState: () => view.state,
+    setState(state) {
+      const previous = view.state;
+      view.setState(state);
+      // The incoming state may have been created under a different preference.
+      view.dispatch({ effects: highlight.reconfigure(highlightExt()) });
+      return previous;
+    },
     getDoc: () => view.state.doc.toString(),
     setHighlight(on) {
-      view.dispatch({
-        effects: highlight.reconfigure(
-          on ? syntaxHighlighting(subtleMarkup) : [],
-        ),
-      });
+      highlightOn = on;
+      view.dispatch({ effects: highlight.reconfigure(highlightExt()) });
     },
     topLine() {
       const block = view.lineBlockAtHeight(
@@ -145,5 +159,6 @@ export function createEditor(opts: EditorOptions): EditorHandle {
       const line = view.state.doc.lineAt(head);
       return { line: line.number, col: head - line.from + 1 };
     },
+    focus: () => view.focus(),
   };
 }

@@ -6,15 +6,162 @@ body {
   overflow: hidden;
 }
 
-/* ---- Toolbar (D-7 targets, D-15 labels, D-19 grouping by spacing) ---- */
+/* ---- Header: tab bar above toolbar ---- */
 #chrome {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ---- Tab bar (D-8, D-9; tabs.ts) ---- */
+#tabbar {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85em;
+}
+
+.tablist {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 240px;
+  height: 40px;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-right: 1px solid var(--border);
+  border-bottom: 3px solid transparent;
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: default;
+  user-select: none;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--bg);
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab.dragging {
+  opacity: 0.5;
+}
+
+.tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  flex: 0 0 auto;
+  font-size: 0.8em;
+}
+
+.tab-close {
+  flex: 0 0 auto;
+  width: var(--target-min);
+  height: var(--target-min);
+  min-width: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tab-close:hover {
+  background: var(--surface);
+}
+
+.tab-overflow {
+  position: relative;
+  display: none;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-left: 1px solid var(--border);
+}
+
+#tabbar.overflowing .tab-overflow {
+  display: flex;
+}
+
+#all-tabs-list {
+  position: absolute;
+  right: var(--space-2);
+  top: 100%;
+  z-index: 10;
+  min-width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1) 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+}
+
+#all-tabs-list [role='option'] {
+  padding: var(--space-1) var(--space-3);
+  min-height: var(--target-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+#all-tabs-list [role='option'][aria-selected='true'] {
+  font-weight: 700;
+}
+
+#all-tabs-list [role='option']:hover {
+  background: var(--surface);
+}
+
+/* ---- Hold-Alt shortcut overlay (R-7, altKeys.ts) ---- */
+[data-keys] {
+  position: relative;
+}
+
+body.show-keys [data-keys]:not([data-keys=''])::after {
+  content: attr(data-keys);
+  position: absolute;
+  top: -0.6em;
+  right: -0.2em;
+  z-index: 5;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-editor);
+  font-size: 0.75em;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---- Toolbar (D-7 targets, D-15 labels, D-19 grouping by spacing) ---- */
+#toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
   font-size: 0.85em;
 }
 
