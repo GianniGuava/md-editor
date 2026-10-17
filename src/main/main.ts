@@ -4,6 +4,7 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { buildMenu } from './menu';
 import { registerFileHandlers } from './files';
+import { startWatching, stopAllWatchers, stopWatching } from './watcher';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -61,6 +62,7 @@ const createWindow = (): BrowserWindow => {
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
     mainWindow = null;
+    void stopAllWatchers();
   });
 
   // Closing with unsaved work: the renderer runs the Save / Don't save / Cancel flow
@@ -121,6 +123,10 @@ ipcMain.handle('app:closeNow', () => {
   mainWindow?.close();
 });
 registerFileHandlers(() => mainWindow);
+ipcMain.handle('watch:start', (_e, p: string) =>
+  startWatching(p, () => mainWindow),
+);
+ipcMain.handle('watch:stop', (_e, p: string) => stopWatching(p));
 
 app.whenReady().then(() => {
   createWindow();

@@ -2,7 +2,7 @@
 
 body {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   overflow: hidden;
 }
 
@@ -197,6 +197,67 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 .tool .glyph {
   font-family: var(--font-editor);
   opacity: 0.8;
+}
+
+/* ---- Banners (D-18, non-modal; banners.ts) ---- */
+#banners:empty {
+  display: none;
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  font-size: 0.9em;
+}
+
+.banner-danger {
+  border-left-color: var(--danger);
+}
+
+.banner-message {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
+.banner-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.tool.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.banner-detail {
+  flex: 1 0 100%;
+  max-height: 40vh;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-editor);
+  font-size: 0.85em;
+  white-space: pre;
+}
+
+.banner-detail .del {
+  color: var(--text2);
+  text-decoration: line-through;
+}
+
+.banner-detail .add {
+  color: var(--link);
+  font-weight: 700;
 }
 
 /* ---- Panes ---- */

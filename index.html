@@ -17,8 +17,12 @@
       <div id="tabbar"></div>
       <div id="toolbar"></div>
     </header>
+    <div id="banners"></div>
     <main id="workspace" aria-label="Editor and preview"></main>
-    <footer role="status" id="status" aria-live="polite"></footer>
+    <footer id="status" role="status" aria-live="polite">
+      <span id="status-main"></span>
+      <span id="status-note"></span>
+    </footer>
     <script type="module" src="/src/renderer/index.ts"></script>
   </body>
 </html>

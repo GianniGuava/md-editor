@@ -8,6 +8,8 @@ import { createZoom } from './zoom';
 import { DocStore, type Doc } from './documents';
 import { createTabBar } from './tabs';
 import { installAltOverlay } from './altKeys';
+import { createBanners } from './banners';
+import { installWatching } from './watching';
 import { SAMPLE } from './sample';
 import type { FileData } from '../preload/preload';
 
@@ -46,6 +48,14 @@ function group(label: string, ...buttons: HTMLElement[]): HTMLElement {
 
 async function boot(): Promise<void> {
   const status = document.getElementById('status')!;
+  const statusMain = document.getElementById('status-main')!;
+  const statusNote = document.getElementById('status-note')!;
+  let noteTimer: number | undefined;
+  const note = (message: string) => {
+    statusNote.textContent = ` · ${message}`;
+    window.clearTimeout(noteTimer);
+    noteTimer = window.setTimeout(() => (statusNote.textContent = ''), 8000);
+  };
   if (!window.md) {
     status.textContent = 'Open this page inside the MD app (no bridge found).';
     return;
@@ -256,7 +266,7 @@ async function boot(): Promise<void> {
     const { line, col } = editor.cursor();
     const words = editor.getDoc().split(/\s+/).filter(Boolean).length;
     const where = d?.path ?? 'Not saved to disk';
-    status.textContent = `${where} · Ln ${line}, Col ${col} · ${words} words · ${zoom.get()} px`;
+    statusMain.textContent = `${where} · Ln ${line}, Col ${col} · ${words} words · ${zoom.get()} px`;
   }
 
   // ---- Toolbar ----
@@ -439,6 +449,8 @@ async function boot(): Promise<void> {
   });
 
   installAltOverlay();
+  const banners = createBanners(document.getElementById('banners')!);
+  installWatching({ store, editor, banners, note, saveAs, closeTab, switchTo });
 
   // ---- Start ----
   const startup = await window.md.getStartupFiles();

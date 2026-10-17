@@ -67,6 +67,19 @@ const api = {
     pathForFile: (file: File): string => webUtils.getPathForFile(file),
   },
 
+  watch: {
+    start: (path: string): Promise<void> =>
+      ipcRenderer.invoke('watch:start', path),
+    stop: (path: string): Promise<void> =>
+      ipcRenderer.invoke('watch:stop', path),
+  },
+  onFileChanged: (cb: (data: FileData) => void) =>
+    on<FileData>('file:changed', cb),
+  onFileRemoved: (cb: (info: { path: string }) => void) =>
+    on<{ path: string }>('file:removed', cb),
+  onWatchError: (cb: (info: { path: string; message: string }) => void) =>
+    on<{ path: string; message: string }>('file:watchError', cb),
+
   /** The one modal dialog (D-21). */
   confirmClose: (name: string): Promise<CloseDecision> =>
     ipcRenderer.invoke('dialog:confirmClose', { name }),

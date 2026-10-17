@@ -418,3 +418,14 @@ Step 3 (tabs, document model, file I/O) is done; verified by a launch that opene
 - **Title and status**: window title `name • – MD` when dirty; status bar shows path or "Not saved to disk", line/column, words, zoom.
 - Deferred: tabs are not yet persisted (step 6); the sample document moved to Help › Open sample document.
 - ENGINEERING choices without a source: 10-entry reopen stack; 300 ms Alt hold; 140–240 px tab widths; replacing a blank untitled tab on open.
+
+## 16. Step 4 log (2026-10-16)
+
+Step 4 (watch and reload) is done; verified live: a file opened from the command line was edited by another process and the app reloaded it within the `awaitWriteFinish` window.
+
+- **Watcher** (`src/main/watcher.ts`): one chokidar watcher per open path with `atomic: true`, `awaitWriteFinish { stabilityThreshold: 200 }`, polling on UNC paths (D-27, VENDOR). Events: `file:changed` (carrying text + SHA-256 + mtime), `file:removed`, `file:watchError`. Watchers are started/stopped from the renderer as tabs come and go, and all are closed when the window closes.
+- **Policy** (`src/renderer/watching.ts`, D-18): hash equal to the last known disk hash → ignored (our own save). Clean buffer → replaced in place through a CodeMirror transaction (undo history kept), status note "Reloaded … at hh:mm:ss". Dirty buffer → non-modal banner with Reload from disk / Keep mine / Show differences; "Keep mine" records the disk hash so the change is not re-asked and the next save overwrites. Deleted or renamed → danger-toned banner with Save as… / Close tab; the buffer becomes "unsaved" so it cannot be lost silently.
+- **Diff** (`src/renderer/diff.ts`): LCS line diff with common prefix/suffix trimming, capped at 4,000 lines (three tests). Rendered in the banner as struck-through (yours) and bold link-coloured (disk) lines, with an aria-label explaining the convention; colour is never the only cue.
+- **Banners** (`src/renderer/banners.ts`): polite live region between toolbar and workspace, labelled buttons, Escape dismisses, banners for closed tabs are removed automatically.
+- ENGINEERING values without a source: 200 ms write-stability threshold; 8 s status-note lifetime; 4,000-line diff cap.
+- Not verified by hand: the dirty-buffer banner path and the removed-file path were exercised by code review and unit tests only (the live test covered the clean-buffer reload).
