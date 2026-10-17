@@ -415,3 +415,110 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   color: var(--text2);
   font-size: 0.8em;
 }
+
+/* ---- Export dialog (exportDialog.ts) ---- */
+#export-dialog {
+  width: min(560px, 92vw);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+#export-dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.export-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.export-form h2 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.export-doc {
+  margin: 0;
+  color: var(--text2);
+}
+
+.export-formats {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.export-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: var(--space-1) 0;
+  cursor: pointer;
+}
+
+.export-row input {
+  margin-top: 0.35em;
+  accent-color: var(--accent);
+}
+
+.export-row.unavailable {
+  color: var(--disabled);
+}
+
+.export-row-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.export-row-text span {
+  font-size: 0.85em;
+}
+
+.export-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-size: 0.85em;
+}
+
+.export-help code {
+  font-family: var(--font-editor);
+  background: var(--surface);
+  padding: 0 var(--space-1);
+}
+
+.export-options {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.export-options select {
+  min-height: var(--target-min);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 0 var(--space-2);
+}
+
+.export-status {
+  margin: 0;
+  min-height: 1.5em;
+}
+
+.export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

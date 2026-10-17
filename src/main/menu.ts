@@ -114,6 +114,10 @@ export function buildMenu(win: BrowserWindow, state: MenuState): void {
       ],
     },
     {
+      label: 'E&xport',
+      submenu: [cmd('&Export…', 'export:open', 'CmdOrCtrl+E')],
+    },
+    {
       label: '&Help',
       submenu: [
         cmd('Open &sample document', 'file:sample'),

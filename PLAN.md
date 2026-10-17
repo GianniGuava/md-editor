@@ -452,3 +452,14 @@ Step 6 (session state) is done; verified live: a launch with a file, a forced st
 - The `main` process keeps the last renderer snapshot so a resize or move alone updates the file without the renderer's help.
 - ENGINEERING values without a source: 500 ms debounce; ten closed tabs; 500 ms bounds debounce.
 - Not verified by hand: draft recovery after a crash with unsaved text (unit-tested write/read/delete only); the "Discard recovered changes" action.
+
+## 19. Step 7 log (2026-10-16)
+
+Step 7 (export) is done.
+
+- **Dialog** (`src/renderer/exportDialog.ts`): Export › Export… (Ctrl+E) opens a native `<dialog>` form listing HTML, PDF, Word, OpenDocument, EPUB, RTF, LaTeX and PDF-via-Pandoc, each with a one-line description and its dependency status; unavailable rows are disabled and say why. Page size (A4/Letter) applies to PDF; the default follows the OS locale (Letter for en-US, en-CA, es-MX, en-PH; ENGINEERING). When Pandoc is missing the dialog shows the install command with a Copy button.
+- **HTML** (`src/renderer/exportHtml.ts`, `src/main/export.ts`): one self-contained file — light tokens plus a print subset of the preview rules, strict CSP, no scripts; local images under 5 MB are inlined as data URIs by the main process (tested). Always light colours regardless of the on-screen theme (positive polarity for print; D-10).
+- **PDF** (built in, D-26): the same HTML loaded in a hidden sandboxed window and printed with `webContents.printToPDF` (A4/Letter, 0.6–0.7 in margins, document outline on). Verified with a standalone script in this Electron version.
+- **Pandoc formats** (D-26, VENDOR): `pandoc -f gfm -t <format> --standalone --metadata title=… --resource-path=<doc dir>` with the Markdown on stdin; PDF via Pandoc only when an engine (typst, weasyprint, wkhtmltopdf, xelatex, pdflatex) is found on PATH. Capabilities are probed each time the dialog opens. Neither Pandoc nor an engine is installed on this machine, so those paths are untested here.
+- **Bundled `reference.docx`** for Word styling (step 7.3) was not produced: generating one requires Pandoc itself. REVIEW R-18: ship Pandoc's default styles (current) or hand-author a reference document later.
+- Not verified by hand: the dialog flow end to end (native save dialog), and every Pandoc path.

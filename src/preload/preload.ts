@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { CloseDecision, FileData } from '../main/files';
 import type { SessionData } from '../main/session';
+import type { ExportCapabilities, PandocFormat } from '../main/export';
 
 /**
  * The typed bridge between the sandboxed renderer and the main process.
@@ -35,9 +36,17 @@ export type AppCommand =
   | 'zoom:out'
   | 'zoom:reset'
   | 'theme:set'
-  | 'theme:cycle';
+  | 'theme:cycle'
+  | 'export:open';
 
 export type ThemePref = 'light' | 'dark' | 'hc' | 'system';
+
+export interface ExportResult {
+  ok: boolean;
+  path?: string;
+  error?: string;
+  cancelled?: boolean;
+}
 
 export interface AppCommandMessage {
   name: AppCommand;
@@ -104,6 +113,27 @@ const api = {
       ipcRenderer.invoke('draft:read', id),
     deleteDraft: (id: string): Promise<void> =>
       ipcRenderer.invoke('draft:delete', id),
+  },
+
+  export: {
+    capabilities: (): Promise<ExportCapabilities> =>
+      ipcRenderer.invoke('export:capabilities'),
+    html: (a: { html: string; docPath: string | null; name: string }) =>
+      ipcRenderer.invoke('export:html', a) as Promise<ExportResult>,
+    pdf: (a: {
+      html: string;
+      docPath: string | null;
+      name: string;
+      pageSize: 'A4' | 'Letter';
+    }) => ipcRenderer.invoke('export:pdf', a) as Promise<ExportResult>,
+    pandoc: (a: {
+      markdown: string;
+      format: PandocFormat;
+      docPath: string | null;
+      name: string;
+      title: string;
+      pdfEngine?: string;
+    }) => ipcRenderer.invoke('export:pandoc', a) as Promise<ExportResult>,
   },
 
   /** The one modal dialog (D-21). */

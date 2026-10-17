@@ -12,6 +12,7 @@ import started from 'electron-squirrel-startup';
 import { buildMenu, type MenuState } from './menu';
 import type { ThemePref } from '../preload/preload';
 import { registerFileHandlers } from './files';
+import { registerExportHandlers } from './export';
 import { startWatching, stopAllWatchers, stopWatching } from './watcher';
 import {
   deleteDraft,
@@ -195,6 +196,7 @@ ipcMain.handle('app:closeNow', () => {
   mainWindow?.close();
 });
 registerFileHandlers(() => mainWindow);
+registerExportHandlers(() => mainWindow);
 ipcMain.handle('session:load', () => {
   const data = loadSession(userData());
   void pruneDrafts(

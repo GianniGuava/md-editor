@@ -13,6 +13,7 @@ import { installWatching } from './watching';
 import { createTheme, type ThemePref } from './theme';
 import { installSession } from './session';
 import { SAMPLE } from './sample';
+import { createExportDialog } from './exportDialog';
 import type { FileData } from '../preload/preload';
 
 /**
@@ -422,6 +423,9 @@ async function boot(): Promise<void> {
       case 'file:sample':
         newTab(SAMPLE, 'Sample.md');
         break;
+      case 'export:open':
+        if (store.active) exportDialog.open(store.active, textOf(store.active));
+        break;
       case 'tab:close':
         if (store.activeId) void closeTab(store.activeId);
         break;
@@ -506,6 +510,7 @@ async function boot(): Promise<void> {
   });
 
   installAltOverlay();
+  const exportDialog = createExportDialog(note);
   installWatching({ store, editor, banners, note, saveAs, closeTab, switchTo });
 
   // ---- Start: restore the last session, then any files given on the command line ----
