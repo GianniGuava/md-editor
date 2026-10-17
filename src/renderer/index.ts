@@ -86,7 +86,13 @@ async function boot(): Promise<void> {
       () => setMode('editor'),
       false,
     ),
-    split: button('Split', '▥', 'Split (Ctrl+\\)', () => setMode('split'), true),
+    split: button(
+      'Split',
+      '▥',
+      'Split (Ctrl+\\)',
+      () => setMode('split'),
+      true,
+    ),
     preview: button(
       'Preview',
       '▣',
