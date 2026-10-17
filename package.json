@@ -24,7 +24,9 @@
     "lint:fix": "oxlint --fix && oxfmt --write",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:logo": "node tools/build-logo.mjs"
+    "build:logo": "node tools/build-logo.mjs",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

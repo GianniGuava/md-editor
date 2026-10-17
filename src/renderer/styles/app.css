@@ -72,14 +72,13 @@ body {
 }
 
 .tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   width: var(--target-min);
   height: var(--target-min);
-  min-width: 0;
-  border: 0;
   border-radius: var(--radius);
-  background: transparent;
-  color: inherit;
   cursor: pointer;
 }
 

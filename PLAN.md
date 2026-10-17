@@ -474,3 +474,26 @@ Step 8 (logo and packaging) is done; the packaged executable was launched with a
 - **R-14** stands: unsigned; SmartScreen will warn on first run of the installer.
 - **R-17** stands: Squirrel installer rather than NSIS.
 - Not done: Windows file association for `.md` (Squirrel has no first-class support; REVIEW R-19 if wanted later).
+
+## 21. Step 9 log (2026-10-16)
+
+Step 9 (accessibility and quality gates) is done as far as automation goes; the human parts are listed in §22.
+
+- **Unit tests** (`npm test`): 73 tests in 8 files — preview sanitising and line tagging, document store, line diff, session store and drafts, export HTML builder and image inlining, and the WCAG contrast gate that parses `tokens.css` (51 pair assertions across three themes, D-25).
+- **End-to-end** (`npm run package` then `npm run test:e2e`, `e2e/app.spec.ts`): Playwright launches the production bundle with the development Electron binary (the packaged `md.exe` carries Forge fuses that disable the Node inspector flags Playwright needs) and an isolated profile via `MD_USER_DATA`. It opens a file from the command line, creates a tab from the toolbar, types, checks the non-colour dirty marker and title, jumps with Ctrl+1, switches pane modes, resizes the splitter by keyboard, navigates tabs by arrow keys, closes, relaunches, and verifies both tabs, the recovered draft banner and the splitter position came back. A second test runs axe-core over the main screen: **zero violations** at any impact level after two fixes below.
+- **Fixes the axe run forced**: (1) the tab close control is no longer a focusable button inside `role=tab` (nested-interactive, serious) nor a wrapper around the tab (aria-required-children, critical); it is a mouse-only affordance, and keyboard users close with Delete, Ctrl+W or middle-click, as the tooltip states. (2) `role=status` was removed from the footer (aria-allowed-role, minor); it keeps `aria-live="polite"`.
+- **Forced colours** (Windows high-contrast mode) is honoured by the `forced-colors` block in `tokens.css`; **reduced motion** by `base.css`. Neither is machine-verified.
+- **Not automated** (needs a person; R-15 is a release gate): NVDA walkthrough of tabs, banners and dialogs; 200 % display scaling; Windows forced-colours appearance; the export dialog's native save dialogs; the Pandoc paths (Pandoc is not installed here); keyboard-only user test and screen-reader user test (CITED Power et al. 2012: guideline compliance covered only half of the problems blind users met).
+
+## 22. Hand-over test checklist (for the user)
+
+Run from source with `npm start`, or install `out/make/squirrel.windows/x64/MD-0.1.0 Setup.exe` (SmartScreen will warn; R-14).
+
+1. **Tabs**: Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+1…9, middle-click close, drag to reorder, open ≥12 files and use the "All tabs" button, Ctrl+Shift+T after closing.
+2. **Files**: Ctrl+O, drop files on the window, Ctrl+S, Ctrl+Shift+S, close a dirty tab (Save / Don't save / Cancel), close the window with two dirty tabs.
+3. **Watching**: open a file, edit it in Notepad and save → it reloads with a status note; type in MD first, then edit in Notepad → banner with Reload / Keep mine / Show differences; delete the file in Explorer → banner with Save as… / Close tab.
+4. **Themes**: View › Theme, Ctrl+Shift+L, System while toggling Windows dark mode; check dialogs follow.
+5. **Session**: arrange tabs, cursor, scroll, split and theme; quit; relaunch; then type without saving, kill the process from Task Manager, relaunch → "Recovered unsaved changes" banner.
+6. **Export**: Ctrl+E → HTML and PDF; install Pandoc and retry Word.
+7. **Accessibility**: Tab through the whole UI with focus always visible; hold Alt for the shortcut badges; NVDA on the tab strip (dirty "(modified)" announced), banners and the export dialog; Windows high-contrast mode; 200 % scaling.
+8. **Logo**: Help › About, and the taskbar icon of the packaged build.

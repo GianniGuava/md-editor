@@ -76,7 +76,8 @@ export function createTabBar(
     tab.setAttribute('aria-selected', String(t.id === activeId));
     tab.tabIndex = t.id === activeId ? 0 : -1;
     tab.draggable = true;
-    tab.title = t.path ?? `${t.name} (not saved to disk)`;
+    tab.title = `${t.path ?? `${t.name} (not saved to disk)`}
+Close: Ctrl+W, Delete, or middle-click`;
     if (index < 9) tab.dataset.keys = `Ctrl+${index + 1}`;
 
     const label = document.createElement('span');
@@ -89,13 +90,14 @@ export function createTabBar(
       ? '<span aria-hidden="true">&#9679;</span><span class="visually-hidden"> (modified)</span>'
       : '';
 
-    const close = document.createElement('button');
-    close.type = 'button';
+    // Mouse affordance only: a nested focusable control would violate the ARIA
+    // tabs pattern (axe nested-interactive / aria-required-children). Keyboard and
+    // screen-reader users close with Delete (handled below), Ctrl+W, or middle-click.
+    const close = document.createElement('span');
     close.className = 'tab-close';
-    close.setAttribute('aria-label', `Close ${t.name}`);
-    close.title = 'Close (Ctrl+W)';
-    close.tabIndex = -1;
-    close.innerHTML = '<span aria-hidden="true">&#215;</span>';
+    close.setAttribute('aria-hidden', 'true');
+    close.title = 'Close (Ctrl+W, Delete, or middle-click)';
+    close.textContent = '×';
     close.addEventListener('click', (e) => {
       e.stopPropagation();
       cb.onClose(t.id);

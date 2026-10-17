@@ -36,7 +36,9 @@ app.setAppUserModelId('com.guevarra.md');
 // In development keep Chromium's profile inside the project (.dev-userdata/, gitignored)
 // so a sandboxed dev shell never needs to write to %APPDATA% (ENGINEERING).
 // Packaged builds use Electron's default %APPDATA%\MD location; session.json goes there in step 6.
-if (!app.isPackaged) {
+if (process.env.MD_USER_DATA) {
+  app.setPath('userData', process.env.MD_USER_DATA); // tests and isolated profiles
+} else if (!app.isPackaged) {
   app.setPath('userData', path.join(app.getAppPath(), '.dev-userdata'));
 }
 
