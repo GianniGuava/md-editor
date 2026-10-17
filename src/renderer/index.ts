@@ -14,6 +14,7 @@ import { createTheme, type ThemePref } from './theme';
 import { installSession } from './session';
 import { SAMPLE } from './sample';
 import { createExportDialog } from './exportDialog';
+import { createAboutDialog } from './about';
 import type { FileData } from '../preload/preload';
 
 /**
@@ -423,6 +424,9 @@ async function boot(): Promise<void> {
       case 'file:sample':
         newTab(SAMPLE, 'Sample.md');
         break;
+      case 'help:about':
+        aboutDialog.open();
+        break;
       case 'export:open':
         if (store.active) exportDialog.open(store.active, textOf(store.active));
         break;
@@ -511,6 +515,7 @@ async function boot(): Promise<void> {
 
   installAltOverlay();
   const exportDialog = createExportDialog(note);
+  const aboutDialog = createAboutDialog(info);
   installWatching({ store, editor, banners, note, saveAs, closeTab, switchTo });
 
   // ---- Start: restore the last session, then any files given on the command line ----

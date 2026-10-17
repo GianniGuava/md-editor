@@ -37,7 +37,8 @@ export type AppCommand =
   | 'zoom:reset'
   | 'theme:set'
   | 'theme:cycle'
-  | 'export:open';
+  | 'export:open'
+  | 'help:about';
 
 export type ThemePref = 'light' | 'dark' | 'hc' | 'system';
 

@@ -522,3 +522,42 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* ---- About dialog ---- */
+#about-dialog {
+  width: min(420px, 92vw);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+#about-dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.about-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.about-form h2,
+.about-form p {
+  margin: 0;
+}
+
+.about-logo svg {
+  width: 128px;
+  height: 128px;
+  border: 1px solid var(--border);
+}
+
+.about-small {
+  font-size: 0.85em;
+  color: var(--text2);
+}

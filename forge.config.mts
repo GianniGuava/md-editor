@@ -10,12 +10,20 @@ const config: ForgeConfig = {
     asar: true,
     name: 'MD',
     executableName: 'md',
-    // icon: 'assets/app' — added in step 8 once the .ico is built from assets/logo.svg
+    icon: 'assets/app', // Forge appends .ico on Windows (built by tools/build-logo.mjs)
+    win32metadata: {
+      CompanyName: 'Giancarlo Guevarra',
+      FileDescription: 'MD Markdown editor',
+      ProductName: 'MD',
+    },
   },
   rebuildConfig: {},
   // Windows is the only target (PLAN.md §1). Squirrel is Forge's Windows installer;
   // PLAN step 8 named electron-builder/NSIS — see §12 note under "Step 8 deviation".
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ['win32'])],
+  makers: [
+    new MakerSquirrel({ setupIcon: 'assets/app.ico' }),
+    new MakerZIP({}, ['win32']),
+  ],
   plugins: [
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.

@@ -146,6 +146,4 @@ vite.config.ts.timestamp-*
 out/
 
 # MD
-*.ico
-!assets/app.ico
 .dev-userdata/

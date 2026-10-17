@@ -121,6 +121,7 @@ export function buildMenu(win: BrowserWindow, state: MenuState): void {
       label: '&Help',
       submenu: [
         cmd('Open &sample document', 'file:sample'),
+        cmd('&About MD', 'help:about'),
         {
           label: 'Jump to tab 1–9',
           sublabel: 'Ctrl+1 … Ctrl+9 (Ctrl+9 is the last tab)',
