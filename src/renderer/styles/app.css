@@ -559,3 +559,8 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   font-size: 0.85em;
   color: var(--text2);
 }
+
+/* A tab from another window is being dragged over this strip */
+#tabbar.drop-target .tablist {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}

@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   SESSION_VERSION,
   deleteDraft,
+  draftIdsIn,
   loadSession,
   pruneDrafts,
   readDraft,
@@ -23,39 +24,71 @@ afterEach(async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
+const tab = {
+  path: 'C:\\x\\a.md',
+  name: 'a.md',
+  anchor: 3,
+  head: 3,
+  scrollTop: 10,
+  dirty: false,
+  draft: null as string | null,
+};
+
 const sample = (): SessionData => ({
   version: SESSION_VERSION,
   savedAt: new Date().toISOString(),
   theme: 'light',
-  paneMode: 'split',
-  split: 50,
-  fontSize: 18,
-  highlight: true,
-  scrollSync: true,
-  tabs: [
+  windows: [
     {
-      path: 'C:\\x\\a.md',
-      name: 'a.md',
-      anchor: 3,
-      head: 3,
-      scrollTop: 10,
-      dirty: false,
-      draft: null,
+      id: 'w1',
+      paneMode: 'split',
+      split: 50,
+      fontSize: 18,
+      highlight: true,
+      scrollSync: true,
+      tabs: [tab],
+      activeIndex: 0,
+      closed: [],
     },
   ],
-  activeIndex: 0,
-  closed: [],
 });
 
 describe('session.json', () => {
   it('round-trips and is absent before the first save', async () => {
     expect(loadSession(dir)).toBeNull();
     await saveSession(dir, sample());
-    expect(loadSession(dir)?.tabs[0].name).toBe('a.md');
+    expect(loadSession(dir)?.windows[0].tabs[0].name).toBe('a.md');
+  });
+
+  it('migrates a version 1 file into one window', async () => {
+    const v1 = {
+      version: 1,
+      savedAt: 'x',
+      window: { x: 1, y: 2, width: 800, height: 600, maximized: false },
+      theme: 'dark',
+      paneMode: 'editor',
+      split: 40,
+      fontSize: 20,
+      highlight: false,
+      scrollSync: true,
+      tabs: [{ ...tab, draft: '0f8fad5b-d9cb-469f-a165-70867728950e' }],
+      activeIndex: 0,
+      closed: [],
+    };
+    await fs.writeFile(sessionFile(dir), JSON.stringify(v1));
+    const data = loadSession(dir);
+    expect(data?.version).toBe(2);
+    expect(data?.theme).toBe('dark');
+    expect(data?.windows).toHaveLength(1);
+    expect(data?.windows[0].window?.width).toBe(800);
+    expect(data?.windows[0].paneMode).toBe('editor');
+    expect(Array.from(draftIdsIn(data))).toEqual([
+      '0f8fad5b-d9cb-469f-a165-70867728950e',
+    ]);
   });
 
   it('ignores unknown versions and corrupt files', async () => {
-    await fs.writeFile(sessionFile(dir), '{"version": 99, "tabs": []}');
+    await fs.writeFile(sessionFile(dir), '{"version": 99, "windows": []}');
     expect(loadSession(dir)).toBeNull();
     await fs.writeFile(sessionFile(dir), '{not json');
     expect(loadSession(dir)).toBeNull();

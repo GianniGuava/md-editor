@@ -68,5 +68,9 @@
     "type": "git",
     "url": "https://github.com/GianniGuava/md-editor.git"
   },
-  "homepage": "https://github.com/GianniGuava/md-editor"
+  "homepage": "https://github.com/GianniGuava/md-editor",
+  "optionalDependencies": {
+    "@oxlint/binding-win32-x64-msvc": "^1.88.0",
+    "@oxlint/win32-x64-msvc": "npm:null@*"
+  }
 }

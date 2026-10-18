@@ -3,29 +3,39 @@ import { watch, type FSWatcher } from 'chokidar';
 import { readTextFile, type FileData } from './files';
 
 /**
- * Per-file watching (PLAN.md step 4; D-27, VENDOR chokidar README).
+ * Per-file watching shared by all windows (PLAN.md step 4; D-27, VENDOR chokidar README).
  *  - `atomic`: editors that save via temp file + rename produce unlink+add within
  *    100 ms; chokidar reports them as one `change`.
  *  - `awaitWriteFinish`: hold events until the size is stable, so a half-written
  *    file is never read.
  *  - UNC paths fall back to polling (Node fs.watch is documented as unreliable on
  *    SMB/NFS shares).
- * Events reach the renderer as file:changed / file:removed / file:watchError; the
- * renderer decides what to do (hash compare, reload policy D-18).
+ * Each window holds a reference; the watcher closes when the last one releases it.
+ * Events go to every window; renderers ignore paths they do not have open.
  */
 
-const watchers = new Map<string, FSWatcher>();
+interface Entry {
+  watcher: FSWatcher;
+  refs: Set<number>; // BrowserWindow ids
+}
+
+const watchers = new Map<string, Entry>();
 
 // UNC paths: \\server\share or //server/share
 const isNetworkPath = (p: string) => p.startsWith('\\\\') || p.startsWith('//');
 
-export function startWatching(
-  p: string,
-  getWindow: () => BrowserWindow | null,
-) {
-  if (watchers.has(p)) return;
-  const send = (channel: string, payload: unknown) =>
-    getWindow()?.webContents.send(channel, payload);
+const broadcast = (channel: string, payload: unknown) => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload);
+  }
+};
+
+export function startWatching(p: string, windowId: number) {
+  const existing = watchers.get(p);
+  if (existing) {
+    existing.refs.add(windowId);
+    return;
+  }
 
   const watcher = watch(p, {
     ignoreInitial: true,
@@ -38,30 +48,41 @@ export function startWatching(
   const emitChange = async () => {
     try {
       const data: FileData = await readTextFile(p);
-      send('file:changed', data);
+      broadcast('file:changed', data);
     } catch (err) {
-      send('file:watchError', { path: p, message: String(err) });
+      broadcast('file:watchError', { path: p, message: String(err) });
     }
   };
 
   watcher
     .on('change', emitChange)
     .on('add', emitChange) // recreated after an unlink
-    .on('unlink', () => send('file:removed', { path: p }))
+    .on('unlink', () => broadcast('file:removed', { path: p }))
     .on('error', (err) =>
-      send('file:watchError', { path: p, message: String(err) }),
+      broadcast('file:watchError', { path: p, message: String(err) }),
     );
 
-  watchers.set(p, watcher);
+  watchers.set(p, { watcher, refs: new Set([windowId]) });
 }
 
-export async function stopWatching(p: string) {
-  const w = watchers.get(p);
-  if (!w) return;
+export async function stopWatching(p: string, windowId: number) {
+  const entry = watchers.get(p);
+  if (!entry) return;
+  entry.refs.delete(windowId);
+  if (entry.refs.size > 0) return;
   watchers.delete(p);
-  await w.close();
+  await entry.watcher.close();
+}
+
+/** Release everything a closed window held. */
+export async function releaseWindow(windowId: number) {
+  await Promise.all(
+    Array.from(watchers.keys()).map((p) => stopWatching(p, windowId)),
+  );
 }
 
 export async function stopAllWatchers() {
-  await Promise.all(Array.from(watchers.keys()).map(stopWatching));
+  const all = Array.from(watchers.values());
+  watchers.clear();
+  await Promise.all(all.map((e) => e.watcher.close()));
 }

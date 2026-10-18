@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { CloseDecision, FileData } from '../main/files';
-import type { SessionData } from '../main/session';
+import type {
+  SessionData,
+  SessionWindowData,
+  WindowReport,
+} from '../main/session';
 import type { ExportCapabilities, PandocFormat } from '../main/export';
 
 /**
@@ -15,6 +19,8 @@ export interface AppInfo {
   version: string;
   electron: string;
   systemTheme: 'light' | 'dark';
+  /** BrowserWindow id of this renderer's window; used to tag cross-window drags. */
+  windowId: number;
 }
 
 export type AppCommand =
@@ -27,6 +33,7 @@ export type AppCommand =
   | 'tab:reopen'
   | 'tab:next'
   | 'tab:prev'
+  | 'tab:detach'
   | 'mode:editor'
   | 'mode:split'
   | 'mode:preview'
@@ -53,6 +60,22 @@ export interface AppCommandMessage {
   name: AppCommand;
   checked?: boolean;
   value?: string;
+}
+
+/** A document travelling between windows (tear-off or cross-window drop). */
+export interface DocSnapshot {
+  id: string; // doc id in the source window
+  path: string | null;
+  name: string;
+  text: string;
+  savedText: string | null;
+  diskHash: string | null;
+  mtimeMs: number | null;
+  dirty: boolean;
+  draftId: string;
+  anchor: number;
+  head: number;
+  scrollTop: number;
 }
 
 const on = <T>(channel: string, cb: (payload: T) => void): (() => void) => {
@@ -105,9 +128,13 @@ const api = {
     on<{ dark: boolean }>('theme:system', cb),
 
   session: {
-    load: (): Promise<SessionData | null> => ipcRenderer.invoke('session:load'),
-    save: (data: SessionData): Promise<void> =>
-      ipcRenderer.invoke('session:save', data),
+    /** This window's saved entry (null for a brand-new window) plus the global theme. */
+    load: (): Promise<{
+      theme: SessionData['theme'];
+      window: SessionWindowData | null;
+    }> => ipcRenderer.invoke('session:load'),
+    save: (report: WindowReport): Promise<void> =>
+      ipcRenderer.invoke('session:save', report),
     writeDraft: (id: string, text: string): Promise<void> =>
       ipcRenderer.invoke('draft:write', { id, text }),
     readDraft: (id: string): Promise<string | null> =>
@@ -115,6 +142,30 @@ const api = {
     deleteDraft: (id: string): Promise<void> =>
       ipcRenderer.invoke('draft:delete', id),
   },
+
+  windows: {
+    /** Open an empty window near this one. */
+    open: (): Promise<void> => ipcRenderer.invoke('window:new'),
+    /**
+     * Move a tab out of this window. Main either hands it to the window it was
+     * dropped on (if a drop was reported) or opens a new window at `point`.
+     * Resolves once the document has a home; the caller then removes its copy.
+     */
+    detachTab: (
+      snapshot: DocSnapshot,
+      point?: { x: number; y: number },
+    ): Promise<void> => ipcRenderer.invoke('tab:detach', { snapshot, point }),
+    /** This window accepted a tab dragged from another window. */
+    tabDropped: (info: {
+      sourceWindowId: number;
+      docId: string;
+    }): Promise<void> => ipcRenderer.invoke('tab:dropped', info),
+    /** The renderer can accept documents now; returns any handed to this new window. */
+    ready: (): Promise<DocSnapshot[]> => ipcRenderer.invoke('window:ready'),
+  },
+  /** A document of this window was accepted elsewhere; remove it without closing. */
+  onRemoveMoved: (cb: (docId: string) => void) =>
+    on<string>('tab:removeMoved', cb),
 
   export: {
     capabilities: (): Promise<ExportCapabilities> =>
@@ -141,11 +192,12 @@ const api = {
   confirmClose: (name: string): Promise<CloseDecision> =>
     ipcRenderer.invoke('dialog:confirmClose', { name }),
 
-  /** Main asks before the window closes; the renderer answers with closeNow() or not at all. */
+  /** Main asks before the window closes; the renderer answers closeNow() or closeCancelled(). */
   onRequestClose: (cb: () => void) => on<void>('app:requestClose', cb),
   closeNow: (): Promise<void> => ipcRenderer.invoke('app:closeNow'),
+  closeCancelled: (): Promise<void> => ipcRenderer.invoke('app:closeCancelled'),
 
-  /** Paths passed on the command line (e.g. "Open with"). */
+  /** Paths passed on the command line (e.g. "Open with"); only the first window gets them. */
   getStartupFiles: (): Promise<string[]> =>
     ipcRenderer.invoke('app:getStartupFiles'),
 };

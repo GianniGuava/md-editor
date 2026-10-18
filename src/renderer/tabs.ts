@@ -1,12 +1,15 @@
 /**
- * Tab bar (PLAN.md step 3.2–3.4; D-8, D-9).
+ * Tab bar (PLAN.md step 3.2–3.4; D-8, D-9) with tear-off and cross-window drops.
  *  - WAI-ARIA tabs pattern: role=tablist, role=tab with aria-selected, roving tabindex,
  *    arrow keys move focus, Enter/Space activate, Delete closes.
  *  - Dirty state is never colour-only (WCAG 1.4.1): a dot glyph plus visually hidden text.
  *  - Overflow scrolls horizontally and an "All tabs" button lists every tab
  *    (Dubroy & Balakrishnan 2010: bars scroll at ~9–13 tabs and titles become unreadable;
  *    titles here keep a minimum width instead of shrinking).
- *  - Middle-click closes; drag and drop reorders.
+ *  - Middle-click closes; drag reorders within the window; dropping a tab on another
+ *    MD window moves it there; releasing it outside any window opens a new one.
+ *  - The close × is a mouse affordance only: a nested focusable control would break
+ *    the tabs pattern (axe nested-interactive). Keyboard users close with Delete/Ctrl+W.
  */
 
 export interface TabInfo {
@@ -20,6 +23,12 @@ export interface TabBarCallbacks {
   onActivate(id: string): void;
   onClose(id: string): void;
   onReorder(id: string, toIndex: number): void;
+  /** JSON for a cross-window drag of this tab. */
+  dragPayload(id: string): string;
+  /** The tab was released outside every MD window. */
+  onDetach(id: string, point: { x: number; y: number }): void;
+  /** A tab from another window was dropped here. */
+  onReceive(payloadJson: string, sourceWindowId: number, toIndex: number): void;
 }
 
 export interface TabBarHandle {
@@ -27,8 +36,13 @@ export interface TabBarHandle {
   focusActive(): void;
 }
 
+const MIME_TAB = 'text/x-md-tab';
+const MIME_SOURCE = 'text/x-md-source';
+const MIME_DOC = 'text/x-md-doc';
+
 export function createTabBar(
   container: HTMLElement,
+  windowId: number,
   cb: TabBarCallbacks,
 ): TabBarHandle {
   container.innerHTML = `
@@ -46,6 +60,7 @@ export function createTabBar(
   const allList = container.querySelector<HTMLUListElement>('#all-tabs-list')!;
 
   let activeId: string | null = null;
+  let tabCount = 0;
 
   const closeList = () => {
     allList.hidden = true;
@@ -68,6 +83,37 @@ export function createTabBar(
     if (!container.contains(e.target as Node)) closeList();
   });
 
+  const isForeign = (dt: DataTransfer | null) =>
+    !!dt &&
+    dt.types.includes(MIME_DOC) &&
+    Number(dt.getData(MIME_SOURCE)) !== windowId;
+  const isForeignTypes = (dt: DataTransfer | null) =>
+    !!dt &&
+    dt.types.includes(MIME_DOC) &&
+    !dt.types.includes(`${MIME_SOURCE}-${windowId}`);
+
+  // Drop anywhere on the strip (e.g. after the last tab) from another window.
+  tablist.addEventListener('dragover', (e) => {
+    if (isForeignTypes(e.dataTransfer)) {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'move';
+      container.classList.add('drop-target');
+    }
+  });
+  tablist.addEventListener('dragleave', () =>
+    container.classList.remove('drop-target'),
+  );
+  tablist.addEventListener('drop', (e) => {
+    container.classList.remove('drop-target');
+    if (!isForeign(e.dataTransfer)) return;
+    e.preventDefault();
+    cb.onReceive(
+      e.dataTransfer!.getData(MIME_DOC),
+      Number(e.dataTransfer!.getData(MIME_SOURCE)),
+      tabCount,
+    );
+  });
+
   function renderTab(t: TabInfo, index: number): HTMLElement {
     const tab = document.createElement('div');
     tab.className = 'tab';
@@ -76,8 +122,7 @@ export function createTabBar(
     tab.setAttribute('aria-selected', String(t.id === activeId));
     tab.tabIndex = t.id === activeId ? 0 : -1;
     tab.draggable = true;
-    tab.title = `${t.path ?? `${t.name} (not saved to disk)`}
-Close: Ctrl+W, Delete, or middle-click`;
+    tab.title = `${t.path ?? `${t.name} (not saved to disk)`}\nClose: Ctrl+W, Delete, or middle-click\nDrag out of the window to open it in a new one`;
     if (index < 9) tab.dataset.keys = `Ctrl+${index + 1}`;
 
     const label = document.createElement('span');
@@ -90,9 +135,6 @@ Close: Ctrl+W, Delete, or middle-click`;
       ? '<span aria-hidden="true">&#9679;</span><span class="visually-hidden"> (modified)</span>'
       : '';
 
-    // Mouse affordance only: a nested focusable control would violate the ARIA
-    // tabs pattern (axe nested-interactive / aria-required-children). Keyboard and
-    // screen-reader users close with Delete (handled below), Ctrl+W, or middle-click.
     const close = document.createElement('span');
     close.className = 'tab-close';
     close.setAttribute('aria-hidden', 'true');
@@ -128,26 +170,54 @@ Close: Ctrl+W, Delete, or middle-click`;
       e.preventDefault();
     });
 
-    // Drag to reorder
+    // Drag: reorder here, move to another window, or tear off into a new one.
     tab.addEventListener('dragstart', (e) => {
-      e.dataTransfer?.setData('text/x-md-tab', t.id);
-      e.dataTransfer!.effectAllowed = 'move';
+      const dt = e.dataTransfer!;
+      dt.setData(MIME_TAB, t.id);
+      dt.setData(MIME_SOURCE, String(windowId));
+      dt.setData(`${MIME_SOURCE}-${windowId}`, '1'); // readable in dragover (types only)
+      dt.setData(MIME_DOC, cb.dragPayload(t.id));
+      dt.effectAllowed = 'move';
       tab.classList.add('dragging');
     });
-    tab.addEventListener('dragend', () => tab.classList.remove('dragging'));
+    tab.addEventListener('dragend', (e) => {
+      tab.classList.remove('dragging');
+      const outside =
+        e.clientX < 0 ||
+        e.clientY < 0 ||
+        e.clientX > window.innerWidth ||
+        e.clientY > window.innerHeight;
+      if (e.dataTransfer?.dropEffect === 'none' && outside) {
+        cb.onDetach(t.id, { x: e.screenX, y: e.screenY });
+      }
+    });
     tab.addEventListener('dragover', (e) => {
-      if (e.dataTransfer?.types.includes('text/x-md-tab')) {
+      const dt = e.dataTransfer;
+      if (dt && (dt.types.includes(MIME_TAB) || dt.types.includes(MIME_DOC))) {
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.stopPropagation();
+        dt.dropEffect = 'move';
       }
     });
     tab.addEventListener('drop', (e) => {
-      const id = e.dataTransfer?.getData('text/x-md-tab');
-      if (!id || id === t.id) return;
+      const dt = e.dataTransfer;
+      if (!dt) return;
       e.preventDefault();
+      e.stopPropagation();
+      container.classList.remove('drop-target');
       const rect = tab.getBoundingClientRect();
       const after = e.clientX > rect.left + rect.width / 2;
-      cb.onReorder(id, after ? index + 1 : index);
+      const toIndex = after ? index + 1 : index;
+      if (isForeign(dt)) {
+        cb.onReceive(
+          dt.getData(MIME_DOC),
+          Number(dt.getData(MIME_SOURCE)),
+          toIndex,
+        );
+        return;
+      }
+      const id = dt.getData(MIME_TAB);
+      if (id && id !== t.id) cb.onReorder(id, toIndex);
     });
 
     return tab;
@@ -156,6 +226,7 @@ Close: Ctrl+W, Delete, or middle-click`;
   return {
     render(tabs, active) {
       activeId = active;
+      tabCount = tabs.length;
       tablist.replaceChildren(...tabs.map(renderTab));
       allList.replaceChildren(
         ...tabs.map((t) => {
@@ -179,7 +250,6 @@ Close: Ctrl+W, Delete, or middle-click`;
           return li;
         }),
       );
-      // Keep the active tab in view when the bar overflows.
       tablist
         .querySelector<HTMLElement>('[aria-selected="true"]')
         ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });

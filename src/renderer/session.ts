@@ -2,16 +2,19 @@ import { EditorSelection } from '@codemirror/state';
 import type { DocStore, Doc } from './documents';
 import type { EditorHandle } from './editor';
 import type { BannersHandle } from './banners';
-import type { SessionData, SessionTab } from '../main/session';
+import type { SessionTab, WindowReport, WindowUi } from '../main/session';
+import type { ThemePref } from './theme';
 
 /**
- * Session capture and restore (PLAN.md step 6; D-22, D-23).
+ * Per-window session capture and restore (PLAN.md step 6; D-22, D-23).
  * CITED: Czerwinski, Horvitz & Wilhite 2004 (software should preserve and recreate
  * multi-document task state); Iqbal & Horvitz 2007 (users wanted autosave on switch);
  * Jones & Martin 2003 (failing to save is an attention-driven human error).
  *  - Debounced 500 ms after any change; also on window blur and before close.
  *  - Dirty text goes to a draft file on the same debounce; a draft is removed when the
  *    document becomes clean or is closed. The user's own file is written only by Save.
+ *  - A document moved to another window keeps its draft id; the source window
+ *    "forgets" it so the draft is neither deleted nor rewritten here.
  */
 
 const DEBOUNCE_MS = 500;
@@ -20,16 +23,8 @@ export interface SessionDeps {
   store: DocStore;
   editor: EditorHandle;
   banners: BannersHandle;
-  getUi(): Omit<
-    SessionData,
-    'version' | 'savedAt' | 'tabs' | 'activeIndex' | 'closed'
-  >;
-  applyUi(
-    ui: Omit<
-      SessionData,
-      'version' | 'savedAt' | 'tabs' | 'activeIndex' | 'closed'
-    >,
-  ): Promise<void>;
+  getUi(): WindowUi & { theme: ThemePref };
+  applyUi(ui: WindowUi & { theme: ThemePref }): Promise<void>;
   /** Re-sync the editor with the active doc after a bulk restore. */
   show(): void;
   stash(): void;
@@ -40,15 +35,17 @@ export interface SessionHandle {
   restore(): Promise<boolean>;
   touch(): void;
   flush(): Promise<void>;
+  /** Stop tracking a draft that now belongs to another window. */
+  forgetDraft(draftId: string): void;
 }
 
 export function installSession(deps: SessionDeps): SessionHandle {
   const { store, editor } = deps;
   let timer: number | undefined;
   let saving: Promise<void> = Promise.resolve();
-  const draftHashes = new Map<string, string>(); // draftId → last written text (by reference)
+  const draftHashes = new Map<string, string>(); // draftId → last written text
 
-  const capture = (): SessionData => {
+  const capture = (): WindowReport => {
     deps.stash();
     const docs = store.list();
     const tabs: SessionTab[] = docs.map((d) => {
@@ -67,8 +64,6 @@ export function installSession(deps: SessionDeps): SessionHandle {
       };
     });
     return {
-      version: 1,
-      savedAt: new Date().toISOString(),
       ...deps.getUi(),
       tabs,
       activeIndex: Math.max(
@@ -101,9 +96,9 @@ export function installSession(deps: SessionDeps): SessionHandle {
     window.clearTimeout(timer);
     timer = undefined;
     saving = saving.then(async () => {
-      const data = capture();
+      const report = capture();
       await writeDrafts(store.list());
-      await window.md.session.save(data);
+      await window.md.session.save(report);
     });
     await saving;
   };
@@ -114,9 +109,12 @@ export function installSession(deps: SessionDeps): SessionHandle {
   };
 
   const restore = async (): Promise<boolean> => {
-    const data = await window.md.session.load();
-    if (!data) return false;
-    await deps.applyUi(data);
+    const { theme, window: data } = await window.md.session.load();
+    if (!data) {
+      await deps.applyUi({ ...deps.getUi(), theme });
+      return false;
+    }
+    await deps.applyUi({ ...data, theme });
     let restoredAny = false;
     for (const tab of data.tabs) {
       let diskText: string | null = null;
@@ -137,7 +135,6 @@ export function installSession(deps: SessionDeps): SessionHandle {
         ? await window.md.session.readDraft(tab.draft)
         : null;
       if (tab.path && missing && draftText === null) {
-        // Nothing to show: the file is gone and there was no unsaved text.
         deps.banners.show({
           key: `restore:${tab.path}`,
           tone: 'danger',
@@ -214,5 +211,10 @@ export function installSession(deps: SessionDeps): SessionHandle {
 
   window.addEventListener('blur', () => void flush());
 
-  return { restore, touch, flush };
+  return {
+    restore,
+    touch,
+    flush,
+    forgetDraft: (id) => draftHashes.delete(id),
+  };
 }

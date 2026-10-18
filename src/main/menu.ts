@@ -7,17 +7,22 @@ import {
 import type { AppCommandMessage, ThemePref } from '../preload/preload';
 
 /**
- * Application menu. Every command shows its accelerator (D-16: Lane et al. 2005,
- * Grossman et al. 2007). Commands reach the renderer as `app:command` messages;
- * Ctrl+1..9 tab jumps are handled in the renderer and listed in Help.
+ * Application menu (shared by all windows). Every command shows its accelerator
+ * (D-16: Lane et al. 2005, Grossman et al. 2007). Commands reach the focused
+ * window's renderer as `app:command` messages; Ctrl+1..9 tab jumps are handled
+ * in the renderer and listed in Help.
  */
 export interface MenuState {
   theme: ThemePref;
 }
 
-export function buildMenu(win: BrowserWindow, state: MenuState): void {
+export interface MenuActions {
+  newWindow(): void;
+}
+
+export function buildMenu(state: MenuState, actions: MenuActions): void {
   const send = (msg: AppCommandMessage) =>
-    win.webContents.send('app:command', msg);
+    BrowserWindow.getFocusedWindow()?.webContents.send('app:command', msg);
   const cmd = (
     label: string,
     name: AppCommandMessage['name'],
@@ -33,6 +38,11 @@ export function buildMenu(win: BrowserWindow, state: MenuState): void {
       label: '&File',
       submenu: [
         cmd('&New tab', 'file:new', 'CmdOrCtrl+T'),
+        {
+          label: 'New &window',
+          accelerator: 'CmdOrCtrl+Shift+N',
+          click: () => actions.newWindow(),
+        },
         cmd('&Open…', 'file:open', 'CmdOrCtrl+O'),
         { type: 'separator' },
         cmd('&Save', 'file:save', 'CmdOrCtrl+S'),
@@ -40,7 +50,13 @@ export function buildMenu(win: BrowserWindow, state: MenuState): void {
         { type: 'separator' },
         cmd('&Close tab', 'tab:close', 'CmdOrCtrl+W'),
         cmd('&Reopen closed tab', 'tab:reopen', 'CmdOrCtrl+Shift+T'),
+        cmd('&Move tab to new window', 'tab:detach'),
         { type: 'separator' },
+        {
+          role: 'close',
+          label: 'Close &window',
+          accelerator: 'CmdOrCtrl+Shift+W',
+        },
         { role: 'quit', label: 'E&xit', accelerator: 'Alt+F4' },
       ],
     },
@@ -125,6 +141,10 @@ export function buildMenu(win: BrowserWindow, state: MenuState): void {
         {
           label: 'Jump to tab 1–9',
           sublabel: 'Ctrl+1 … Ctrl+9 (Ctrl+9 is the last tab)',
+          enabled: false,
+        },
+        {
+          label: 'Drag a tab out of the window to open it in a new one',
           enabled: false,
         },
         {

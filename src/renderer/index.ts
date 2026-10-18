@@ -1,5 +1,6 @@
 import './styles/base.css';
 import './styles/app.css';
+import { EditorSelection } from '@codemirror/state';
 import { createEditor } from './editor';
 import { createPreview } from './preview';
 import { createLayout, type PaneMode } from './layout';
@@ -15,11 +16,12 @@ import { installSession } from './session';
 import { SAMPLE } from './sample';
 import { createExportDialog } from './exportDialog';
 import { createAboutDialog } from './about';
-import type { FileData } from '../preload/preload';
+import type { DocSnapshot, FileData } from '../preload/preload';
 
 /**
- * Renderer entry: tabs over one editor/preview pair, file open/save through the
- * bridge, watch/reload banners, themes, and session capture/restore.
+ * Renderer entry for one window: tabs over one editor/preview pair, file open/save
+ * through the bridge, watch/reload banners, themes, per-window session capture and
+ * restore, and tab transfer to other windows.
  */
 
 function button(
@@ -70,7 +72,6 @@ async function boot(): Promise<void> {
 
   // Light is the default (D-10). The service reports the preference to main (menu, dialogs).
   const theme = createTheme();
-  await theme.set(theme.get());
   window.md.onSystemTheme(({ dark }) => theme.systemChanged(dark));
 
   const zoom = createZoom();
@@ -150,6 +151,11 @@ async function boot(): Promise<void> {
 
   const isBlankUntitled = (d: Doc) =>
     d.path === null && !d.dirty && d.state.doc.length === 0;
+  const dropLoneBlank = () => {
+    const list = store.list();
+    if (list.length === 1 && isBlankUntitled(list[0]))
+      store.remove(list[0].id, false);
+  };
 
   const openFiles = (files: FileData[]) => {
     if (files.length === 0) return;
@@ -182,10 +188,81 @@ async function boot(): Promise<void> {
     show();
   };
 
-  // ---- Saving ----
   const textOf = (d: Doc) =>
     d.id === store.activeId ? editor.getDoc() : d.state.doc.toString();
 
+  // ---- Moving documents between windows ----
+  const snapshot = (d: Doc): DocSnapshot => {
+    const state = d.id === store.activeId ? editor.getState() : d.state;
+    const sel = state.selection.main;
+    return {
+      id: d.id,
+      path: d.path,
+      name: d.name,
+      text: state.doc.toString(),
+      savedText: d.savedText,
+      diskHash: d.diskHash,
+      mtimeMs: d.mtimeMs,
+      dirty: d.dirty,
+      draftId: d.draftId,
+      anchor: sel.anchor,
+      head: sel.head,
+      scrollTop:
+        d.id === store.activeId ? editor.view.scrollDOM.scrollTop : d.scrollTop,
+    };
+  };
+  const addFromSnapshot = (s: DocSnapshot, toIndex?: number): Doc => {
+    stash();
+    dropLoneBlank();
+    const existing = s.path ? store.findByPath(s.path) : undefined;
+    if (existing) {
+      // Already open here: keep this window's copy, just activate it.
+      store.activate(existing.id);
+      show();
+      return existing;
+    }
+    const clamp = (n: number) => Math.max(0, Math.min(n, s.text.length));
+    const state = editor.createState(s.text).update({
+      selection: EditorSelection.single(clamp(s.anchor), clamp(s.head)),
+    }).state;
+    const d = store.add(
+      {
+        path: s.path,
+        name: s.name,
+        state,
+        savedText: s.savedText,
+        diskHash: s.diskHash,
+        mtimeMs: s.mtimeMs,
+        dirty: s.dirty,
+        draftId: s.draftId,
+      },
+      false,
+    );
+    store.patch(d.id, { scrollTop: s.scrollTop });
+    if (toIndex !== undefined) store.move(d.id, toIndex);
+    store.activate(d.id);
+    show();
+    return d;
+  };
+  /** Remove a document that now lives in another window (no dialog, draft kept). */
+  const removeMoved = (id: string) => {
+    const d = store.get(id);
+    if (!d) return;
+    session.forgetDraft(d.draftId);
+    if (id === store.activeId) stash();
+    store.remove(id, false);
+    if (store.list().length === 0) newTab();
+    else show();
+  };
+  const detach = async (id: string, point?: { x: number; y: number }) => {
+    const d = store.get(id);
+    if (!d) return;
+    await window.md.windows.detachTab(snapshot(d), point);
+    removeMoved(id);
+  };
+  window.md.onRemoveMoved(removeMoved);
+
+  // ---- Saving ----
   const saveAs = async (d: Doc): Promise<boolean> => {
     const text = textOf(d);
     const suggested =
@@ -251,18 +328,40 @@ async function boot(): Promise<void> {
 
   window.md.onRequestClose(async () => {
     for (const d of store.list()) {
-      if (d.dirty && !(await closeTab(d.id))) return; // cancelled
+      if (d.dirty && !(await closeTab(d.id))) {
+        await window.md.closeCancelled();
+        return;
+      }
     }
     await session.flush();
     await window.md.closeNow();
   });
 
   // ---- Tabs ----
-  const tabBar = createTabBar(document.getElementById('tabbar')!, {
-    onActivate: switchTo,
-    onClose: (id) => void closeTab(id),
-    onReorder: (id, i) => store.move(id, i),
-  });
+  const tabBar = createTabBar(
+    document.getElementById('tabbar')!,
+    info.windowId,
+    {
+      onActivate: switchTo,
+      onClose: (id) => void closeTab(id),
+      onReorder: (id, i) => store.move(id, i),
+      dragPayload: (id) => {
+        const d = store.get(id);
+        return d ? JSON.stringify(snapshot(d)) : '';
+      },
+      onDetach: (id, point) => void detach(id, point),
+      onReceive: (json, sourceWindowId, toIndex) => {
+        let s: DocSnapshot;
+        try {
+          s = JSON.parse(json) as DocSnapshot;
+        } catch {
+          return;
+        }
+        addFromSnapshot(s, toIndex);
+        void window.md.windows.tabDropped({ sourceWindowId, docId: s.id });
+      },
+    },
+  );
   const updateTitle = () => {
     const d = store.active;
     document.title = d ? `${d.name}${d.dirty ? ' •' : ''} – MD` : 'MD';
@@ -349,6 +448,13 @@ async function boot(): Promise<void> {
         'Ctrl+S',
         () => void (store.active && save(store.active)),
       ),
+      button(
+        'Window',
+        '⧉',
+        'New window',
+        'Ctrl+Shift+N',
+        () => void window.md.windows.open(),
+      ),
     ),
     group(
       'Pane layout',
@@ -381,7 +487,7 @@ async function boot(): Promise<void> {
     passive: true,
   });
 
-  // ---- Session (step 6) ----
+  // ---- Session (step 6; one entry per window) ----
   const session = installSession({
     store,
     editor,
@@ -424,12 +530,6 @@ async function boot(): Promise<void> {
       case 'file:sample':
         newTab(SAMPLE, 'Sample.md');
         break;
-      case 'help:about':
-        aboutDialog.open();
-        break;
-      case 'export:open':
-        if (store.active) exportDialog.open(store.active, textOf(store.active));
-        break;
       case 'tab:close':
         if (store.activeId) void closeTab(store.activeId);
         break;
@@ -441,6 +541,9 @@ async function boot(): Promise<void> {
         break;
       case 'tab:prev':
         switchTo(store.neighbour(-1));
+        break;
+      case 'tab:detach':
+        if (store.activeId) void detach(store.activeId);
         break;
       case 'mode:editor':
         setMode('editor');
@@ -478,6 +581,12 @@ async function boot(): Promise<void> {
         updateStatus();
         session.touch();
         break;
+      case 'export:open':
+        if (store.active) exportDialog.open(store.active, textOf(store.active));
+        break;
+      case 'help:about':
+        aboutDialog.open();
+        break;
     }
   });
 
@@ -500,7 +609,7 @@ async function boot(): Promise<void> {
     true,
   );
 
-  // Drop files on the window to open them.
+  // Drop files on the window to open them (tab drops are handled by the tab bar).
   window.addEventListener('dragover', (e) => {
     if (e.dataTransfer?.types.includes('Files')) e.preventDefault();
   });
@@ -518,12 +627,15 @@ async function boot(): Promise<void> {
   const aboutDialog = createAboutDialog(info);
   installWatching({ store, editor, banners, note, saveAs, closeTab, switchTo });
 
-  // ---- Start: restore the last session, then any files given on the command line ----
+  // ---- Start: this window's saved tabs, then documents handed over by another window,
+  //      then files given on the command line; a blank tab only if nothing else ----
   const restored = await session.restore();
+  const handed = await window.md.windows.ready();
+  for (const s of handed) addFromSnapshot(s);
   const startup = await window.md.getStartupFiles();
   if (startup.length > 0) {
     openFiles(await Promise.all(startup.map((p) => window.md.files.read(p))));
-  } else if (!restored) {
+  } else if (!restored && handed.length === 0) {
     newTab();
   }
   updateStatus();

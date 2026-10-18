@@ -200,3 +200,89 @@ test('main screen has no serious or critical axe violations', async () => {
     await closeQuietly(app, page);
   }
 });
+
+test('opens a second window, hands a tab to a new window, restores both windows', async () => {
+  const { app, page } = await launch([file]);
+  let second: Page | undefined;
+  try {
+    // New window from the toolbar.
+    const opened = app.waitForEvent('window');
+    await page.getByRole('button', { name: /^Window/ }).click();
+    second = await opened;
+    await second.waitForSelector('[role=tab]');
+    expect(app.windows()).toHaveLength(2);
+    await expect(second.locator('[role=tab]')).toHaveCount(1);
+    await expect(
+      second.locator('[role=tab][aria-selected=true]'),
+    ).toContainText('Untitled');
+
+    // Hand the first window's document to a brand-new window through the bridge
+    // (the same call the tab tear-off makes after a drag ends outside every window).
+    const third = app.waitForEvent('window');
+    await page.evaluate(() =>
+      window.md.windows.detachTab(
+        {
+          id: 'x',
+          path: null,
+          name: 'Moved.md',
+          text: '# Moved across windows',
+          savedText: null,
+          diskHash: null,
+          mtimeMs: null,
+          dirty: true,
+          draftId: '0f8fad5b-d9cb-469f-a165-70867728950e',
+          anchor: 0,
+          head: 0,
+          scrollTop: 0,
+        },
+        { x: 200, y: 200 },
+      ),
+    );
+    const moved = await third;
+    await moved.waitForSelector('[role=tab]');
+    expect(app.windows()).toHaveLength(3);
+    await expect(moved.locator('[role=tab]')).toHaveCount(1);
+    await expect(moved.locator('[role=tab][aria-selected=true]')).toContainText(
+      'Moved.md',
+    );
+    await expect(moved.locator('#preview-pane h1')).toHaveText(
+      'Moved across windows',
+    );
+
+    // Closing one window on purpose drops it from the session; the others survive.
+    await moved.waitForTimeout(700);
+    await moved.evaluate(() => {
+      void window.md.closeNow();
+    });
+    await moved.waitForEvent('close').catch(() => undefined);
+    await page.waitForTimeout(800);
+  } finally {
+    await page.waitForTimeout(700);
+    for (const w of app.windows()) {
+      await w
+        .evaluate(() => {
+          void window.md.closeNow();
+        })
+        .catch(() => undefined);
+    }
+    await app.close().catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
+  const again = await launch([]);
+  try {
+    // Both remaining windows (note.md and the Untitled one) are back.
+    await again.page.waitForTimeout(1500);
+    expect(again.app.windows()).toHaveLength(2);
+  } finally {
+    for (const w of again.app.windows()) {
+      await w
+        .evaluate(() => {
+          void window.md.closeNow();
+        })
+        .catch(() => undefined);
+    }
+    await again.app.close().catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+});

@@ -4,15 +4,14 @@ import path from 'node:path';
 import { writeTextFileAtomic } from './files';
 
 /**
- * Session persistence (PLAN.md step 6; D-22, D-23).
- *  - One session.json in userData, written atomically (temp file, fsync, rename) so a
- *    crash mid-write never corrupts it.
+ * Session persistence (PLAN.md step 6; D-22, D-23), version 2: one entry per window.
+ *  - session.json in userData, written atomically (temp file, fsync, rename).
  *  - Unsaved text lives in userData/drafts/<draftId>.md; the user's own file is only
  *    written by an explicit Save (R-12).
- *  - `version` allows forward migration; unknown versions are ignored, never deleted.
+ *  - Version 1 (single window) is migrated on load; unknown versions are ignored.
  */
 
-export const SESSION_VERSION = 1;
+export const SESSION_VERSION = 2;
 
 export interface SessionTab {
   path: string | null;
@@ -32,20 +31,39 @@ export interface SessionWindow {
   maximized: boolean;
 }
 
-export interface SessionData {
-  version: number;
-  savedAt: string;
-  window?: SessionWindow;
-  theme: 'light' | 'dark' | 'hc' | 'system';
+export interface ClosedDocRecord {
+  path: string | null;
+  name: string;
+  text: string;
+}
+
+export interface WindowUi {
   paneMode: 'editor' | 'split' | 'preview';
   split: number;
   fontSize: number;
   highlight: boolean;
   scrollSync: boolean;
+}
+
+export interface SessionWindowData extends WindowUi {
+  id: string;
+  window?: SessionWindow;
   tabs: SessionTab[];
   activeIndex: number;
-  closed: { path: string | null; name: string; text: string }[];
+  closed: ClosedDocRecord[];
 }
+
+export interface SessionData {
+  version: number;
+  savedAt: string;
+  theme: 'light' | 'dark' | 'hc' | 'system';
+  windows: SessionWindowData[];
+}
+
+/** What a renderer reports for its own window (main adds id and bounds). */
+export type WindowReport = Omit<SessionWindowData, 'id' | 'window'> & {
+  theme: SessionData['theme'];
+};
 
 export const sessionFile = (dir: string) => path.join(dir, 'session.json');
 export const draftsDir = (dir: string) => path.join(dir, 'drafts');
@@ -54,14 +72,66 @@ const draftFile = (dir: string, id: string) => {
   return path.join(draftsDir(dir), `${id}.md`);
 };
 
+export function emptySession(): SessionData {
+  return {
+    version: SESSION_VERSION,
+    savedAt: new Date().toISOString(),
+    theme: 'light',
+    windows: [],
+  };
+}
+
+interface SessionV1 {
+  version: 1;
+  window?: SessionWindow;
+  theme: SessionData['theme'];
+  paneMode: WindowUi['paneMode'];
+  split: number;
+  fontSize: number;
+  highlight: boolean;
+  scrollSync: boolean;
+  tabs: SessionTab[];
+  activeIndex: number;
+  closed: ClosedDocRecord[];
+}
+
+function migrateV1(v1: SessionV1): SessionData {
+  return {
+    version: SESSION_VERSION,
+    savedAt: new Date().toISOString(),
+    theme: v1.theme ?? 'light',
+    windows: [
+      {
+        id: 'w1',
+        window: v1.window,
+        paneMode: v1.paneMode ?? 'split',
+        split: v1.split ?? 50,
+        fontSize: v1.fontSize ?? 18,
+        highlight: v1.highlight ?? true,
+        scrollSync: v1.scrollSync ?? true,
+        tabs: v1.tabs ?? [],
+        activeIndex: v1.activeIndex ?? 0,
+        closed: v1.closed ?? [],
+      },
+    ],
+  };
+}
+
 /** Synchronous so window bounds can be applied before the first paint. */
 export function loadSession(dir: string): SessionData | null {
   try {
     const raw = fs.readFileSync(sessionFile(dir), 'utf8');
-    const data = JSON.parse(raw) as Partial<SessionData>;
-    if (data.version !== SESSION_VERSION || !Array.isArray(data.tabs))
-      return null;
-    return data as SessionData;
+    const data = JSON.parse(raw) as { version?: number };
+    if (data.version === 1 && Array.isArray((data as SessionV1).tabs)) {
+      return migrateV1(data as SessionV1);
+    }
+    if (
+      data.version === SESSION_VERSION &&
+      Array.isArray((data as SessionData).windows)
+    ) {
+      return data as SessionData;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -116,3 +186,10 @@ export async function pruneDrafts(
       .map((n) => fsp.rm(path.join(draftsDir(dir), n), { force: true })),
   );
 }
+
+export const draftIdsIn = (data: SessionData | null): Set<string> =>
+  new Set(
+    (data?.windows ?? []).flatMap((w) =>
+      w.tabs.flatMap((t) => (t.draft ? [t.draft] : [])),
+    ),
+  );
