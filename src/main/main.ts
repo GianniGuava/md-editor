@@ -22,6 +22,7 @@ import {
   stopWatching,
 } from './watcher';
 import {
+  backupSession,
   deleteDraft,
   draftIdsIn,
   emptySession,
@@ -48,9 +49,13 @@ app.setAppUserModelId('com.guevarra.md');
 // In development keep Chromium's profile inside the project (.dev-userdata/, gitignored)
 // so a sandboxed dev shell never needs to write to %APPDATA% (ENGINEERING).
 // Packaged builds use Electron's default %APPDATA%\MD location.
+// `--appdata` keeps the standard profile when the production bundle is run through the
+// signed Electron runtime (node_modules\electron\dist\electron.exe <project> --appdata),
+// the way the desktop shortcut works while Smart App Control blocks the unsigned md.exe.
+const useAppData = process.argv.includes('--appdata');
 if (process.env.MD_USER_DATA) {
   app.setPath('userData', process.env.MD_USER_DATA); // tests and isolated profiles
-} else if (!app.isPackaged) {
+} else if (!app.isPackaged && !useAppData) {
   app.setPath('userData', path.join(app.getAppPath(), '.dev-userdata'));
 }
 
@@ -79,6 +84,7 @@ let startupFiles = process.argv
 
 /* ---------------- Session (one entry per window) ---------------- */
 
+backupSession(userData());
 let session: SessionData = loadSession(userData()) ?? emptySession();
 const menuState: MenuState = { theme: session.theme };
 let writeTimer: NodeJS.Timeout | undefined;
@@ -175,6 +181,10 @@ const createWindow = (opts: CreateOptions = {}): BrowserWindow => {
     minWidth: 640,
     minHeight: 400,
     title: 'MD',
+    // Packaged builds carry the icon in the executable; the runtime launch needs it here.
+    icon: app.isPackaged
+      ? undefined
+      : path.join(app.getAppPath(), 'assets', 'app.ico'),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#121212' : '#FFFFFF', // tokens.css bg
     show: false,
     webPreferences: {

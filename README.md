@@ -42,6 +42,26 @@ npm run make         # out/make/squirrel.windows/x64/MD-<version> Setup.exe and 
 
 The installer is unsigned (PLAN.md R-14); Windows SmartScreen will warn on first run.
 
+## Running on a PC with Smart App Control
+
+Windows 11's Smart App Control blocks unsigned executables once it leaves evaluation
+mode, and the packaged `md.exe` is unsigned (PLAN.md R-14, R-20). Electron's own
+runtime in `node_modules` is signed, so the production bundle can be run through it
+instead; this is what the desktop shortcut does:
+
+```
+node_modules\electron\dist\electron.exe "C:\path	o\md-editor" --appdata
+```
+
+`--appdata` keeps the normal `%APPDATA%\MD` profile (without it a runtime launch
+uses `.dev-userdata` like `npm start`). Run `npm run package` after pulling changes
+to refresh the bundle in `.vite/`. Auto-update does not run in this mode. The real fix
+is code signing (R-20); turning Smart App Control off is possible but cannot be undone
+without reinstalling Windows.
+
+The previous launch's session is kept as `%APPDATA%\MD\session.previous.json`; copy it
+over `session.json` (with the app closed) to get an earlier tab list back.
+
 ## Releasing (for friends and updates)
 
 Releases live on GitHub: <https://github.com/GianniGuava/md-editor/releases>. Installed

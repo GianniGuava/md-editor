@@ -117,6 +117,15 @@ function migrateV1(v1: SessionV1): SessionData {
   };
 }
 
+/** Keep the previous launch's file as session.previous.json before this launch writes. */
+export function backupSession(dir: string): void {
+  try {
+    fs.copyFileSync(sessionFile(dir), path.join(dir, 'session.previous.json'));
+  } catch {
+    /* nothing to back up */
+  }
+}
+
 /** Synchronous so window bounds can be applied before the first paint. */
 export function loadSession(dir: string): SessionData | null {
   try {
