@@ -314,13 +314,20 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 }
 
 .preview-body {
-  max-width: var(--measure);
   margin: 0;
   padding: var(--space-3) var(--space-4);
   font-family: var(--font-ui);
   text-align: left;
   hyphens: none;
-  overflow-wrap: anywhere;
+  /* Break between words; inside a word only when it cannot fit a line on its own.
+     ("anywhere" split table headers letter by letter.) */
+  overflow-wrap: break-word;
+}
+
+/* The prose measure (D-2) applies to text blocks; tables and code blocks may use the
+   whole pane and scroll sideways beyond it. */
+.preview-body > :not(table, pre) {
+  max-width: var(--measure);
 }
 
 /* Heading scale is an ENGINEERING choice (no source for exact ratios); kept modest. */
@@ -381,8 +388,21 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   color: var(--text2);
 }
 
+/* Tables keep their natural column widths and scroll sideways inside the measure
+   instead of being squeezed into it (ENGINEERING; prose measure D-2 is for prose). */
 .preview-body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
+  scrollbar-width: thin;
+}
+
+.preview-body th,
+.preview-body td {
+  min-width: 6ch;
+  overflow-wrap: normal;
+  vertical-align: top;
 }
 
 .preview-body th,

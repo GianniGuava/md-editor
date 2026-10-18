@@ -18,7 +18,7 @@ body {
   margin: 0 auto;
   padding: 2rem 1.5rem;
   text-align: left;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .preview-body h1 {
@@ -85,15 +85,21 @@ body {
   color: var(--text2);
 }
 
+/* Paper cannot scroll: wide tables shrink their type a little and may exceed the
+   measure up to the page width (ENGINEERING). */
 .preview-body table {
   border-collapse: collapse;
   break-inside: avoid;
+  max-width: 100%;
+  font-size: 0.85em;
 }
 .preview-body th,
 .preview-body td {
   border: 1px solid var(--border);
   padding: 0.25em 0.5em;
   text-align: left;
+  overflow-wrap: normal;
+  vertical-align: top;
 }
 .preview-body th {
   background: var(--surface);
