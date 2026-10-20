@@ -105,12 +105,12 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
       if (next) {
         next.classList.add('active-block');
         if (keepInView) {
-          const top = next.offsetTop;
-          const bottom = top + next.offsetHeight;
-          const viewTop = parent.scrollTop;
-          const viewBottom = viewTop + parent.clientHeight;
-          if (top < viewTop || bottom > viewBottom) {
-            next.scrollIntoView({ block: 'nearest' });
+          // Screen rectangles: offsetTop would be relative to the nearest positioned
+          // ancestor (a table for its rows), not to the scrolling pane.
+          const r = next.getBoundingClientRect();
+          const v = parent.getBoundingClientRect();
+          if (r.top < v.top || r.bottom > v.bottom) {
+            next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
           }
         }
       }

@@ -625,8 +625,13 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   cursor: default;
 }
 
-.preview-body .active-block {
+.preview-body .active-block:not(tr) {
   /* 3 px accent bar 12 px to the left of the block; no layout shift */
   box-shadow: -12px 0 0 -9px var(--accent);
   border-radius: 1px;
+}
+
+/* Table rows do not paint box shadows: mark the row's first cell instead. */
+.preview-body tr.active-block > :first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
