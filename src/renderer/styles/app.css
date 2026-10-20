@@ -584,3 +584,38 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 #tabbar.drop-target .tablist {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+
+/* ---- Footnotes (markdown-it-footnote) ---- */
+.preview-body .footnote-ref a {
+  text-decoration: none;
+  padding: 0 0.15em;
+}
+
+.preview-body .footnotes {
+  margin-top: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-size: 0.9em;
+  color: var(--text2);
+}
+
+.preview-body .footnotes-sep {
+  display: none;
+}
+
+.preview-body .footnotes-list {
+  padding-left: var(--space-4);
+}
+
+.preview-body .footnote-item p {
+  margin: 0 0 0.5em;
+}
+
+.preview-body .footnote-backref {
+  text-decoration: none;
+  margin-left: 0.25em;
+}
+
+.preview-body :target {
+  background: var(--selection);
+}

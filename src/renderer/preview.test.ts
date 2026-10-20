@@ -33,4 +33,14 @@ describe('renderMarkdown', () => {
     expect(html).toContain('<pre data-line="5"');
     expect(html).toContain('<ul data-line="9"');
   });
+
+  it('renders footnotes (renumbered in order of appearance) with a list at the end', () => {
+    const html = renderMarkdown('Claim.[^3]\n\n[^3]: The note.');
+    expect(html).toContain('class="footnote-ref"');
+    expect(html).toContain('href="#fn1"');
+    expect(html).toContain('class="footnotes"');
+    expect(html).toContain('id="fn1"');
+    expect(html).toContain('The note.');
+    expect(html).toContain('class="footnote-backref"');
+  });
 });

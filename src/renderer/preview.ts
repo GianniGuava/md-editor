@@ -1,5 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import DOMPurify from 'dompurify';
+import footnote from 'markdown-it-footnote';
 
 /**
  * Markdown → sanitised HTML for the preview pane (PLAN.md step 2.2).
@@ -14,6 +15,10 @@ const md = new MarkdownIt({
   typographer: false,
   breaks: false,
 });
+
+// Footnotes ([^1] … [^1]: text) are a Pandoc/PHP-Markdown extension, not CommonMark or
+// GFM; the plugin renders superscript links and a numbered list at the end (VENDOR).
+md.use(footnote);
 
 // Attach source line numbers to opening block tokens.
 md.core.ruler.push('source_lines', (state) => {

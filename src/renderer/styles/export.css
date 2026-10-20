@@ -116,3 +116,20 @@ body {
 @page {
   margin: 0;
 }
+
+.preview-body .footnote-ref a,
+.preview-body .footnote-backref {
+  text-decoration: none;
+}
+.preview-body .footnotes {
+  margin-top: 2em;
+  padding-top: 0.5em;
+  border-top: 1px solid var(--border);
+  font-size: 0.85em;
+}
+.preview-body .footnotes-sep {
+  display: none;
+}
+.preview-body .footnote-item p {
+  margin: 0 0 0.4em;
+}

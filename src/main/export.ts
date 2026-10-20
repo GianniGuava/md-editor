@@ -236,7 +236,7 @@ export function registerExportHandlers(getWindow: () => BrowserWindow | null) {
       if (!out) return { ok: false as const, cancelled: true as const };
       const args = [
         '-f',
-        'gfm',
+        'gfm+footnotes',
         '-t',
         a.format === 'pdf' ? 'pdf' : a.format,
         '-o',
