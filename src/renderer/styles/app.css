@@ -646,3 +646,53 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   vertical-align: -0.2em;
   pointer-events: none;
 }
+
+/* ---- Find/replace panel (@codemirror/search) ---- */
+.cm-editor .cm-panels {
+  background: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: 0.85em;
+}
+
+.cm-editor .cm-panel.cm-search {
+  padding: var(--space-2) var(--space-3);
+}
+
+.cm-editor .cm-panel.cm-search input,
+.cm-editor .cm-panel.cm-search button {
+  font: inherit;
+  min-height: 28px;
+  margin: 2px var(--space-1) 2px 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.cm-editor .cm-panel.cm-search button {
+  cursor: pointer;
+}
+
+.cm-editor .cm-panel.cm-search label {
+  margin-right: var(--space-2);
+}
+
+.cm-editor .cm-panel.cm-search input[type='checkbox'] {
+  min-height: 0;
+  accent-color: var(--accent);
+}
+
+.cm-editor .cm-searchMatch {
+  background: var(--selection);
+}
+
+.cm-editor .cm-searchMatch.cm-searchMatch-selected {
+  outline: 2px solid var(--accent);
+}
+
+.cm-editor .cm-selectionMatch {
+  background: var(--surface2);
+}

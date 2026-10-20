@@ -126,6 +126,22 @@ test('opens a file, edits in a new tab, switches panes, restores the session', a
     await page.getByRole('button', { name: /^Split/ }).click();
     await expect(page.locator('#panes')).toHaveAttribute('data-mode', 'split');
 
+    // Find: Ctrl+F opens the search panel, matches are marked, Escape closes it.
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('Control+f');
+    await expect(page.locator('.cm-panel.cm-search')).toBeVisible();
+    await page.keyboard.type('world');
+    await expect(page.locator('.cm-searchMatch')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.cm-panel.cm-search')).toHaveCount(0);
+    // Word selection with Ctrl+Shift+Left (user report).
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Control+Shift+ArrowLeft');
+    expect(
+      await page.evaluate(() => window.getSelection()?.toString()),
+    ).not.toBe('');
+
     // Splitter is keyboard-operable.
     await page.locator('#splitter').focus();
     await page.keyboard.press('ArrowRight');

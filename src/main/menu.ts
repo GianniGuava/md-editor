@@ -70,6 +70,11 @@ export function buildMenu(state: MenuState, actions: MenuActions): void {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
+        { type: 'separator' },
+        cmd('&Find…', 'edit:find', 'CmdOrCtrl+F'),
+        cmd('Find &next', 'edit:findNext', 'F3'),
+        cmd('Find &previous', 'edit:findPrev', 'Shift+F3'),
+        cmd('&Replace…', 'edit:replace', 'CmdOrCtrl+H'),
       ],
     },
     {

@@ -7,11 +7,24 @@ import {
   lineNumbers,
 } from '@codemirror/view';
 import {
+  cursorGroupLeft,
+  cursorGroupRight,
   defaultKeymap,
   history,
   historyKeymap,
   indentWithTab,
+  selectGroupLeft,
+  selectGroupRight,
 } from '@codemirror/commands';
+import {
+  closeSearchPanel,
+  findNext,
+  findPrevious,
+  highlightSelectionMatches,
+  openSearchPanel,
+  search,
+  searchKeymap,
+} from '@codemirror/search';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import {
@@ -131,6 +144,11 @@ export interface EditorHandle {
   blockMap(pos?: number): { line: number; map: VisibleMap } | null;
   /** Move the cursor to a position and reveal it. */
   setCursor(pos: number): void;
+  /** Find/replace panel (Ctrl+F, Ctrl+H, F3, Shift+F3 in the Edit menu). */
+  openSearch(): void;
+  closeSearch(): void;
+  findNext(): void;
+  findPrevious(): void;
   focus(): void;
 }
 
@@ -155,7 +173,26 @@ export function createEditor(opts: EditorOptions): EditorHandle {
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     highlight.of(highlightExt()),
     editorTheme,
-    keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+    // Word movement/selection bound explicitly and first, so nothing later in the
+    // keymap can shadow Ctrl+Shift+Arrow (user report 2026-10-19).
+    keymap.of([
+      { key: 'Ctrl-ArrowLeft', run: cursorGroupLeft, shift: selectGroupLeft },
+      {
+        key: 'Ctrl-ArrowRight',
+        run: cursorGroupRight,
+        shift: selectGroupRight,
+      },
+      { key: 'Alt-Shift-ArrowLeft', run: selectGroupLeft },
+      { key: 'Alt-Shift-ArrowRight', run: selectGroupRight },
+    ]),
+    search({ top: true }),
+    highlightSelectionMatches(),
+    keymap.of([
+      ...searchKeymap,
+      ...defaultKeymap,
+      ...historyKeymap,
+      indentWithTab,
+    ]),
     EditorView.contentAttributes.of({
       'aria-label': 'Markdown source',
       spellcheck: 'false',
@@ -267,6 +304,18 @@ export function createEditor(opts: EditorOptions): EditorHandle {
       const p = Math.max(0, Math.min(pos, view.state.doc.length));
       view.dispatch({ selection: { anchor: p }, scrollIntoView: true });
       view.focus();
+    },
+    openSearch: () => {
+      openSearchPanel(view);
+    },
+    closeSearch: () => {
+      closeSearchPanel(view);
+    },
+    findNext: () => {
+      findNext(view);
+    },
+    findPrevious: () => {
+      findPrevious(view);
     },
     focus: () => view.focus(),
   };

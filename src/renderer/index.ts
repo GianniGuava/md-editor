@@ -583,6 +583,16 @@ async function boot(): Promise<void> {
       case 'tab:prev':
         switchTo(store.neighbour(-1));
         break;
+      case 'edit:find':
+      case 'edit:replace':
+        editor.openSearch();
+        break;
+      case 'edit:findNext':
+        editor.findNext();
+        break;
+      case 'edit:findPrev':
+        editor.findPrevious();
+        break;
       case 'tab:detach':
         if (store.activeId) void detach(store.activeId);
         break;
