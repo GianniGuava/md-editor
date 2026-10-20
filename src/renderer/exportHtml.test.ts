@@ -14,7 +14,7 @@ describe('buildStandaloneHtml', () => {
       '<title>A &lt;b&gt; &quot;quoted&quot; &amp; title</title>',
     );
     expect(html).toContain('<style>\np{margin:0}\n</style>');
-    expect(html).toContain('<h1 data-line="1">Hi</h1>');
+    expect(html).toContain('<h1 data-line="1" data-line-end="1">Hi</h1>');
     expect(html).not.toContain('<script');
     expect(html).toContain("default-src 'none'");
   });
