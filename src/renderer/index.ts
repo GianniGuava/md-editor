@@ -86,7 +86,7 @@ async function boot(): Promise<void> {
     window.clearTimeout(renderTimer);
     renderTimer = window.setTimeout(() => {
       preview.render(text);
-      highlightCursorBlock(); // the re-render replaced the marked element
+      highlightCursorBlock(true); // re-render replaced the marks; keep the caret in view
     }, 100);
   };
 
@@ -112,22 +112,21 @@ async function boot(): Promise<void> {
   // Cursor ↔ block highlight: the preview marks the block under the editor cursor and a
   // click on a preview block moves the cursor to its source line. Follows the
   // "Sync scroll" toggle (ENGINEERING; no study on cross-pane highlighting, see H-10).
-  function highlightCursorBlock(keepInView = false) {
+  function highlightCursorBlock(reveal = false) {
     if (!sync.isEnabled()) {
       preview.highlightLine(null);
       preview.placeCaret(null);
       return;
     }
-    preview.highlightLine(editor.cursor().line, keepInView);
+    preview.highlightLine(editor.cursor().line);
     // Character-level caret: visible-text offset of the cursor within its block.
     const info = editor.blockMap();
-    if (!info) {
-      preview.placeCaret(null);
-      return;
-    }
     preview.placeCaret(
-      visibleOffsetOf(info.map, editor.view.state.selection.main.head),
+      info
+        ? visibleOffsetOf(info.map, editor.view.state.selection.main.head)
+        : null,
     );
+    if (reveal) preview.revealCaret();
   }
   preview.onBlockClick((line, point) => {
     if (!sync.isEnabled()) return;

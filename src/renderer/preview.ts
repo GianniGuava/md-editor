@@ -61,8 +61,10 @@ export interface PreviewHandle {
   render(source: string): void;
   /** Rendered blocks with their 1-based source line, in document order. */
   blocks(): { line: number; el: HTMLElement }[];
-  /** Mark the block that contains the given 1-based source line; null clears. */
-  highlightLine(line: number | null, keepInView?: boolean): void;
+  /** Mark the block that contains the given 1-based source line; null clears. Never scrolls. */
+  highlightLine(line: number | null): void;
+  /** Scroll the least amount needed to show the caret (or the marked block). */
+  revealCaret(): void;
   /** Called with the source line of a block the user clicked (links excluded). */
   onBlockClick(
     cb: (line: number, point: { x: number; y: number }) => void,
@@ -73,24 +75,14 @@ export interface PreviewHandle {
   visibleOffsetAt(point: { x: number; y: number }): number | null;
 }
 
-/** The table around an element when that table scrolls vertically (frozen headers). */
-export function scrollingTable(el: Element): HTMLTableElement | null {
-  const t = el.closest('table');
-  return t && t.scrollHeight > t.clientHeight + 1 ? t : null;
-}
-
 export function createPreview(parent: HTMLElement): PreviewHandle {
   const article = document.createElement('article');
   article.className = 'preview-body';
   parent.appendChild(article);
 
-  // Table viewports fit the pane; each table records its header height so rows
-  // scrolled into view land below the frozen header.
+  // Each table records its header height: with frozen headers the caret's scroll
+  // margin keeps it below a stuck header row.
   const measureTables = () => {
-    parent.style.setProperty(
-      '--table-viewport',
-      `${Math.max(160, parent.clientHeight - 32)}px`,
-    );
     for (const t of article.querySelectorAll<HTMLTableElement>('table')) {
       t.style.setProperty('--thead-h', `${t.tHead?.offsetHeight ?? 0}px`);
     }
@@ -156,38 +148,43 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
   return {
     scroller: parent,
     render(source) {
+      // Elements that scroll on their own (wide tables, code blocks) keep their
+      // position across a re-render; the pane keeps its own because it is not replaced.
+      const kept = Array.from(
+        article.querySelectorAll<HTMLElement>('table, pre'),
+        (el) => [el.scrollLeft, el.scrollTop] as const,
+      );
       article.innerHTML = renderMarkdown(source);
+      article.querySelectorAll<HTMLElement>('table, pre').forEach((el, i) => {
+        const k = kept[i];
+        if (k) {
+          el.scrollLeft = k[0];
+          el.scrollTop = k[1];
+        }
+      });
       measureTables();
     },
-    highlightLine(line, keepInView = false) {
+    highlightLine(line) {
       const current = article.querySelector<HTMLElement>('.active-block');
       const next = line === null ? null : blockFor(line);
       if (current === next) return;
       current?.classList.remove('active-block');
-      if (next) {
-        next.classList.add('active-block');
-        if (keepInView) {
-          // Screen rectangles: offsetTop would be relative to the nearest positioned
-          // ancestor (a table for its rows), not to the scrolling pane.
-          const r = next.getBoundingClientRect();
-          const v = parent.getBoundingClientRect();
-          let top = v.top;
-          let bottom = v.bottom;
-          // Inside a scrolling table the visible band is the table's own viewport,
-          // minus the frozen header for body rows.
-          const t = next.tagName === 'TABLE' ? null : scrollingTable(next);
-          if (t) {
-            const tr = t.getBoundingClientRect();
-            const header = next.closest('thead')
-              ? 0
-              : (t.tHead?.offsetHeight ?? 0);
-            top = Math.max(top, tr.top + header);
-            bottom = Math.min(bottom, tr.bottom);
-          }
-          if (r.top < top || r.bottom > bottom) {
-            next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-          }
-        }
+      next?.classList.add('active-block');
+    },
+    revealCaret() {
+      // Only the caret, never a whole block: a block taller than the pane can never be
+      // fully shown, and trying to made the preview flip while typing.
+      const caret = article.querySelector<HTMLElement>('.preview-caret');
+      if (caret) {
+        caret.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        return;
+      }
+      const block = article.querySelector<HTMLElement>('.active-block');
+      if (!block) return;
+      const r = block.getBoundingClientRect();
+      const v = parent.getBoundingClientRect();
+      if (r.bottom < v.top || r.top > v.bottom) {
+        block.scrollIntoView({ block: 'nearest' });
       }
     },
     onBlockClick(cb) {

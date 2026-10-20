@@ -425,11 +425,17 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 }
 
 /* Freeze table headers (user request 2026-10-19; View menu and toolbar toggle).
-   A table taller than the pane becomes its own viewport with a sticky header row;
-   --table-viewport and --thead-h are measured in preview.ts. */
-#preview-pane.freeze-headers .preview-body table {
-  max-height: var(--table-viewport, 70vh);
+   The header row sticks to the pane itself, so tables must not be scroll boxes:
+   in this mode they keep their natural width and the pane scrolls sideways too.
+   (Tables as their own viewports, tried first, hid rows from scroll sync.) */
+#preview-pane.freeze-headers {
   overflow: auto;
+}
+
+#preview-pane.freeze-headers .preview-body table {
+  display: table;
+  max-width: none;
+  overflow: visible;
 }
 
 #preview-pane.freeze-headers .preview-body thead th {
@@ -437,10 +443,6 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   top: 0;
   z-index: 2;
   box-shadow: 0 1px 0 var(--border);
-}
-
-#preview-pane.freeze-headers .preview-body tbody tr {
-  scroll-margin-top: var(--thead-h, 2.5em);
 }
 
 .preview-body img {
@@ -663,15 +665,25 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-/* Editor caret mirrored in the preview (character-level sync) */
+/* Editor caret mirrored in the preview (character-level sync). Zero width and drawn
+   by a pseudo-element, so moving it never re-wraps text or shifts the layout. */
 .preview-body .preview-caret {
-  display: inline-block;
-  width: 0;
-  height: 1.1em;
-  margin-left: -1px;
+  position: relative;
+  scroll-margin: 32px 48px;
+}
+
+.preview-body .preview-caret::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -0.1em;
+  height: 1.25em;
   border-left: 2px solid var(--accent);
-  vertical-align: -0.2em;
   pointer-events: none;
+}
+
+#preview-pane.freeze-headers .preview-body tbody .preview-caret {
+  scroll-margin-top: calc(var(--thead-h, 2.5em) + 32px);
 }
 
 /* ---- Find/replace panel (@codemirror/search) ---- */

@@ -138,6 +138,10 @@ export interface EditorHandle {
   topLine(): number;
   /** Scroll so that the given 1-based line sits at the top. */
   scrollToLine(line: number): void;
+  /** Fractional source line at the top of the viewport: line + fraction of its height. */
+  topLineFraction(): number;
+  /** Scroll so a fractional source line sits at the top of the viewport. */
+  scrollToLineFraction(line: number): void;
   /** 1-based line and column of the main cursor. */
   cursor(): { line: number; col: number };
   /**
@@ -232,6 +236,26 @@ export function createEditor(opts: EditorOptions): EditorHandle {
         view.scrollDOM.scrollTop - view.documentPadding.top,
       );
       return view.state.doc.lineAt(block.from).number;
+    },
+    topLineFraction() {
+      const top = view.scrollDOM.scrollTop - view.documentPadding.top;
+      const block = view.lineBlockAtHeight(Math.max(0, top));
+      const n = view.state.doc.lineAt(block.from).number;
+      const f = block.height > 0 ? (top - block.top) / block.height : 0;
+      return n + Math.min(1, Math.max(0, f));
+    },
+    scrollToLineFraction(x) {
+      const apply = () => {
+        const doc = view.state.doc;
+        const n = Math.max(1, Math.min(Math.floor(x), doc.lines));
+        const f = Math.min(1, Math.max(0, x - n));
+        const block = view.lineBlockAt(doc.line(n).from);
+        view.scrollDOM.scrollTop =
+          block.top + f * block.height + view.documentPadding.top;
+      };
+      apply();
+      // Off-screen line heights are estimates until measured; correct once.
+      requestAnimationFrame(apply);
     },
     scrollToLine(line) {
       const n = Math.max(1, Math.min(line, view.state.doc.lines));
