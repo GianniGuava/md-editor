@@ -99,6 +99,12 @@ test('opens a file, edits in a new tab, switches panes, restores the session', a
     ).toHaveText(/modified/);
     await expect(page).toHaveTitle(/Untitled-1 •/);
     await expect(page.locator('#preview-pane')).toContainText('Draft text');
+    // The block under the cursor is marked in the preview; clicking a block moves the cursor.
+    await expect(page.locator('#preview-pane .active-block')).toHaveCount(1);
+    await page.keyboard.press('Control+1');
+    await page.locator('#preview-pane p').first().click();
+    await expect(page.locator('#status-main')).toContainText('Ln 3');
+    await page.keyboard.press('Control+2');
 
     // Ctrl+1 jumps to the first tab (renderer handler).
     await page.keyboard.press('Control+1');

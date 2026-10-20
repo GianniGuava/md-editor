@@ -619,3 +619,14 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 .preview-body :target {
   background: var(--selection);
 }
+
+/* ---- Block under the editor cursor (follows Sync scroll) ---- */
+.preview-body [data-line] {
+  cursor: default;
+}
+
+.preview-body .active-block {
+  /* 3 px accent bar 12 px to the left of the block; no layout shift */
+  box-shadow: -12px 0 0 -9px var(--accent);
+  border-radius: 1px;
+}

@@ -83,7 +83,10 @@ async function boot(): Promise<void> {
   let renderTimer: number | undefined;
   const scheduleRender = (text: string) => {
     window.clearTimeout(renderTimer);
-    renderTimer = window.setTimeout(() => preview.render(text), 100);
+    renderTimer = window.setTimeout(() => {
+      preview.render(text);
+      highlightCursorBlock(); // the re-render replaced the marked element
+    }, 100);
   };
 
   const editor = createEditor({
@@ -99,10 +102,29 @@ async function boot(): Promise<void> {
     },
     onCursorChange: () => {
       updateStatus();
+      highlightCursorBlock(true);
       session.touch();
     },
   });
   const sync = createScrollSync(editor, preview);
+
+  // Cursor ↔ block highlight: the preview marks the block under the editor cursor and a
+  // click on a preview block moves the cursor to its source line. Follows the
+  // "Sync scroll" toggle (ENGINEERING; no study on cross-pane highlighting, see H-10).
+  function highlightCursorBlock(keepInView = false) {
+    if (!sync.isEnabled()) {
+      preview.highlightLine(null);
+      return;
+    }
+    preview.highlightLine(editor.cursor().line, keepInView);
+  }
+  preview.onBlockClick((line) => {
+    if (!sync.isEnabled()) return;
+    const n = Math.max(1, Math.min(line, editor.view.state.doc.lines));
+    const pos = editor.view.state.doc.line(n).from;
+    editor.view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    editor.focus();
+  });
   let highlightOn = true;
 
   // ---- Document switching ----
@@ -480,6 +502,7 @@ async function boot(): Promise<void> {
   function setSync(on: boolean) {
     sync.setEnabled(on);
     syncBtn.setAttribute('aria-pressed', String(on));
+    highlightCursorBlock();
     session.touch();
   }
   layout.onModeChange(() => session.touch());
