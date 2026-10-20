@@ -635,3 +635,14 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 .preview-body tr.active-block > :first-child {
   box-shadow: inset 3px 0 0 var(--accent);
 }
+
+/* Editor caret mirrored in the preview (character-level sync) */
+.preview-body .preview-caret {
+  display: inline-block;
+  width: 0;
+  height: 1.1em;
+  margin-left: -1px;
+  border-left: 2px solid var(--accent);
+  vertical-align: -0.2em;
+  pointer-events: none;
+}

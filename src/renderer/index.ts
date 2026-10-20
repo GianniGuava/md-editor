@@ -16,6 +16,7 @@ import { installSession } from './session';
 import { SAMPLE } from './sample';
 import { createExportDialog } from './exportDialog';
 import { createAboutDialog } from './about';
+import { sourcePosOf, visibleOffsetOf } from './caretMap';
 import type { DocSnapshot, FileData } from '../preload/preload';
 
 /**
@@ -114,16 +115,29 @@ async function boot(): Promise<void> {
   function highlightCursorBlock(keepInView = false) {
     if (!sync.isEnabled()) {
       preview.highlightLine(null);
+      preview.placeCaret(null);
       return;
     }
     preview.highlightLine(editor.cursor().line, keepInView);
+    // Character-level caret: visible-text offset of the cursor within its block.
+    const info = editor.blockMap();
+    if (!info) {
+      preview.placeCaret(null);
+      return;
+    }
+    preview.placeCaret(
+      visibleOffsetOf(info.map, editor.view.state.selection.main.head),
+    );
   }
-  preview.onBlockClick((line) => {
+  preview.onBlockClick((line, point) => {
     if (!sync.isEnabled()) return;
     const n = Math.max(1, Math.min(line, editor.view.state.doc.lines));
-    const pos = editor.view.state.doc.line(n).from;
-    editor.view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-    editor.focus();
+    const lineStart = editor.view.state.doc.line(n).from;
+    // Map the clicked character back to the source when the block can be resolved.
+    const info = editor.blockMap(lineStart);
+    const vis = preview.visibleOffsetAt(point);
+    if (info && vis !== null) editor.setCursor(sourcePosOf(info.map, vis));
+    else editor.setCursor(lineStart);
   });
   let highlightOn = true;
 

@@ -64,7 +64,13 @@ export interface PreviewHandle {
   /** Mark the block that contains the given 1-based source line; null clears. */
   highlightLine(line: number | null, keepInView?: boolean): void;
   /** Called with the source line of a block the user clicked (links excluded). */
-  onBlockClick(cb: (line: number) => void): void;
+  onBlockClick(
+    cb: (line: number, point: { x: number; y: number }) => void,
+  ): void;
+  /** Draw the caret at a visible-text offset inside the marked block; null removes it. */
+  placeCaret(visibleOffset: number | null): void;
+  /** Visible-text offset of the character under a screen point within the block at that point. */
+  visibleOffsetAt(point: { x: number; y: number }): number | null;
 }
 
 export function createPreview(parent: HTMLElement): PreviewHandle {
@@ -72,13 +78,49 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
   article.className = 'preview-body';
   parent.appendChild(article);
 
-  let clickHandler: ((line: number) => void) | null = null;
+  let clickHandler:
+    | ((line: number, point: { x: number; y: number }) => void)
+    | null = null;
   article.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
     if (target.closest('a')) return; // links keep their own behaviour
     const block = target.closest<HTMLElement>('[data-line]');
-    if (block && clickHandler) clickHandler(Number(block.dataset.line));
+    if (block && clickHandler) {
+      clickHandler(Number(block.dataset.line), { x: e.clientX, y: e.clientY });
+    }
   });
+
+  // Text nodes that count towards the visible text of a block: everything except the
+  // whitespace markdown-it puts between structural tags, and the caret itself.
+  const STRUCTURAL = new Set([
+    'TABLE',
+    'THEAD',
+    'TBODY',
+    'TR',
+    'UL',
+    'OL',
+    'SECTION',
+    'DIV',
+  ]);
+  const countedTextNodes = (block: HTMLElement): Text[] => {
+    const out: Text[] = [];
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n as Text;
+      const parent = t.parentElement;
+      if (!parent || parent.closest('.preview-caret')) continue;
+      if (STRUCTURAL.has(parent.tagName) && t.data.trim() === '') continue;
+      out.push(t);
+    }
+    return out;
+  };
+  const removeCaret = () => {
+    const old = article.querySelector('.preview-caret');
+    if (!old) return;
+    const parent = old.parentNode;
+    old.remove();
+    parent?.normalize(); // re-join the text node the caret split
+  };
 
   /** Innermost block whose source range contains the line. */
   const blockFor = (line: number): HTMLElement | null => {
@@ -117,6 +159,59 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
     },
     onBlockClick(cb) {
       clickHandler = cb;
+    },
+    placeCaret(visibleOffset) {
+      removeCaret();
+      if (visibleOffset === null) return;
+      const block = article.querySelector<HTMLElement>('.active-block');
+      if (!block) return;
+      const nodes = countedTextNodes(block);
+      let remaining = visibleOffset;
+      let target: Text | null = null;
+      let offset = 0;
+      for (const t of nodes) {
+        if (remaining <= t.length) {
+          target = t;
+          offset = remaining;
+          break;
+        }
+        remaining -= t.length;
+      }
+      if (!target) {
+        const last = nodes.at(-1);
+        if (!last) return;
+        target = last;
+        offset = last.length;
+      }
+      const caret = document.createElement('span');
+      caret.className = 'preview-caret';
+      caret.setAttribute('aria-hidden', 'true');
+      const range = document.createRange();
+      range.setStart(target, offset);
+      range.collapse(true);
+      range.insertNode(caret);
+    },
+    visibleOffsetAt(point) {
+      const doc = document as Document & {
+        caretPositionFromPoint?: (
+          x: number,
+          y: number,
+        ) => { offsetNode: Node; offset: number } | null;
+      };
+      const pos = doc.caretPositionFromPoint?.(point.x, point.y);
+      if (!pos) return null;
+      const el =
+        pos.offsetNode.nodeType === Node.TEXT_NODE
+          ? pos.offsetNode.parentElement
+          : (pos.offsetNode as Element);
+      const block = el?.closest<HTMLElement>('[data-line]');
+      if (!block) return null;
+      let n = 0;
+      for (const t of countedTextNodes(block)) {
+        if (t === pos.offsetNode) return n + pos.offset;
+        n += t.length;
+      }
+      return null;
     },
     blocks() {
       return Array.from(

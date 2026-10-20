@@ -14,7 +14,12 @@ import {
 } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import {
+  HighlightStyle,
+  syntaxHighlighting,
+  syntaxTree,
+} from '@codemirror/language';
+import { buildVisibleMap, type SkipRange, type VisibleMap } from './caretMap';
 import { tags } from '@lezer/highlight';
 
 /**
@@ -25,6 +30,40 @@ import { tags } from '@lezer/highlight';
  *  - Markup colouring is subtle and switchable (D-11): evidence for a comprehension
  *    benefit is mixed (Hannebauer 2018 vs Sarkar 2015). Colours are tokens only.
  */
+
+/** Lezer node types that correspond to a rendered block carrying data-line. */
+const BLOCKS = new Set([
+  'Paragraph',
+  'ATXHeading1',
+  'ATXHeading2',
+  'ATXHeading3',
+  'ATXHeading4',
+  'ATXHeading5',
+  'ATXHeading6',
+  'SetextHeading1',
+  'SetextHeading2',
+  'FencedCode',
+  'CodeBlock',
+  'TableHeader',
+  'TableRow',
+]);
+/** Markup that produces no visible text. */
+const MARKS = new Set([
+  'EmphasisMark',
+  'CodeMark',
+  'CodeInfo',
+  'LinkMark',
+  'LinkLabel',
+  'LinkTitle',
+  'URL',
+  'HeaderMark',
+  'QuoteMark',
+  'ListMark',
+  'StrikethroughMark',
+  'TaskMarker',
+  'SuperscriptMark',
+  'SubscriptMark',
+]);
 
 const subtleMarkup = HighlightStyle.define([
   { tag: tags.heading, fontWeight: '700' },
@@ -85,6 +124,13 @@ export interface EditorHandle {
   scrollToLine(line: number): void;
   /** 1-based line and column of the main cursor. */
   cursor(): { line: number; col: number };
+  /**
+   * Visible-text map of the innermost block at a position (default: the cursor),
+   * for character-level sync with the preview; null outside any block.
+   */
+  blockMap(pos?: number): { line: number; map: VisibleMap } | null;
+  /** Move the cursor to a position and reveal it. */
+  setCursor(pos: number): void;
   focus(): void;
 }
 
@@ -158,6 +204,69 @@ export function createEditor(opts: EditorOptions): EditorHandle {
       const head = view.state.selection.main.head;
       const line = view.state.doc.lineAt(head);
       return { line: line.number, col: head - line.from + 1 };
+    },
+    blockMap(pos) {
+      const state = view.state;
+      const at = pos ?? state.selection.main.head;
+      const tree = syntaxTree(state);
+      // A position at a block's first character resolves into the block only from the
+      // right (side 1); at its last character only from the left (side -1). Try both.
+      const findBlock = (side: -1 | 1) => {
+        let n: ReturnType<typeof tree.resolveInner> | null = tree.resolveInner(
+          at,
+          side,
+        );
+        while (n && !BLOCKS.has(n.name)) n = n.parent;
+        return n;
+      };
+      const node = findBlock(1) ?? findBlock(-1);
+      if (!node) return null;
+      const block = node;
+      const skips: SkipRange[] = [];
+      tree.iterate({
+        from: block.from,
+        to: block.to,
+        enter(n) {
+          if (
+            n.from === block.from &&
+            n.to === block.to &&
+            n.name === block.name
+          )
+            return;
+          if (n.name === 'Autolink') return; // its URL is the visible text
+          if (
+            n.name === 'Image' ||
+            n.name === 'HTMLTag' ||
+            n.name === 'HardBreak'
+          ) {
+            skips.push({ from: n.from, to: n.to });
+            return false;
+          }
+          if (n.name === 'Escape' || n.name === 'Entity') {
+            skips.push({ from: n.from, to: n.to, keep: 1 });
+            return false;
+          }
+          if (n.name === 'TableDelimiter') {
+            skips.push({ from: n.from, to: n.to, boundary: true });
+            return false;
+          }
+          if (MARKS.has(n.name)) {
+            skips.push({ from: n.from, to: n.to });
+            return false;
+          }
+          return;
+        },
+      });
+      const source = state.sliceDoc(block.from, block.to);
+      return {
+        line: state.doc.lineAt(block.from).number,
+        map: buildVisibleMap(source, block.from, skips, block.to),
+      };
+    },
+    setCursor(pos) {
+      const p = Math.max(0, Math.min(pos, view.state.doc.length));
+      view.dispatch({ selection: { anchor: p }, scrollIntoView: true });
+      view.focus();
     },
     focus: () => view.focus(),
   };
