@@ -34,4 +34,12 @@ describe('writeTextFileAtomic / readTextFile', () => {
     await writeTextFileAtomic(p, 'two');
     expect((await readTextFile(p)).text).toBe('two');
   });
+
+  it('survives concurrent writes to the same path', async () => {
+    const p = path.join(dir, 'session.json');
+    const texts = ['a', 'bb', 'ccc', 'dddd', 'eeeee'];
+    await Promise.all(texts.map((t) => writeTextFileAtomic(p, t)));
+    expect(texts).toContain((await readTextFile(p)).text);
+    expect(await fs.readdir(dir)).toEqual(['session.json']);
+  });
 });

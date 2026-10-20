@@ -95,12 +95,18 @@ export function installSession(deps: SessionDeps): SessionHandle {
   const flush = async () => {
     window.clearTimeout(timer);
     timer = undefined;
-    saving = saving.then(async () => {
-      const report = capture();
-      await writeDrafts(store.list());
-      await window.md.session.save(report);
-    });
-    await saving;
+    saving = saving
+      .catch(() => undefined)
+      .then(async () => {
+        const report = capture();
+        await writeDrafts(store.list());
+        await window.md.session.save(report);
+      });
+    try {
+      await saving;
+    } catch (err) {
+      console.error('[md] session flush failed', err);
+    }
   };
 
   const touch = () => {

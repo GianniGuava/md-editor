@@ -24,6 +24,8 @@ const MARKDOWN_FILTERS = [
   { name: 'All files', extensions: ['*'] },
 ];
 
+let tmpCounter = 0;
+
 export const hashText = (text: string): string =>
   createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -40,13 +42,37 @@ export async function readTextFile(p: string): Promise<FileData> {
 }
 
 /** Write to a sibling temp file, flush it, then rename over the target (ENGINEERING). */
+const writeQueues = new Map<string, Promise<unknown>>();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Write to a sibling temp file, flush it, then rename over the target (ENGINEERING).
+ * Writes to one path are serialised (two windows save the session at once) and the
+ * rename is retried on the transient EPERM/EBUSY Windows reports when the target is
+ * momentarily held by another replace, an antivirus scan or the search indexer.
+ */
 export async function writeTextFileAtomic(
+  p: string,
+  text: string,
+): Promise<{ hash: string; mtimeMs: number }> {
+  const key = path.resolve(p);
+  const previous = writeQueues.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => writeNow(p, text));
+  writeQueues.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (writeQueues.get(key) === run) writeQueues.delete(key);
+  }
+}
+
+async function writeNow(
   p: string,
   text: string,
 ): Promise<{ hash: string; mtimeMs: number }> {
   const tmp = path.join(
     path.dirname(p),
-    `.${path.basename(p)}.md-tmp-${process.pid}`,
+    `.${path.basename(p)}.md-tmp-${process.pid}-${++tmpCounter}`,
   );
   const fh = await fs.open(tmp, 'w');
   try {
@@ -55,7 +81,21 @@ export async function writeTextFileAtomic(
   } finally {
     await fh.close();
   }
-  await fs.rename(tmp, p);
+  const delays = [20, 50, 100, 200, 400];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(tmp, p);
+      break;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if ((code === 'EPERM' || code === 'EBUSY') && attempt < delays.length) {
+        await sleep(delays[attempt]);
+        continue;
+      }
+      await fs.rm(tmp, { force: true });
+      throw err;
+    }
+  }
   const st = await fs.stat(p);
   return { hash: hashText(text), mtimeMs: st.mtimeMs };
 }

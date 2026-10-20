@@ -88,6 +88,17 @@ backupSession(userData());
 let session: SessionData = loadSession(userData()) ?? emptySession();
 const menuState: MenuState = { theme: session.theme };
 let writeTimer: NodeJS.Timeout | undefined;
+// Session writes are serialised: renderers of several windows save independently.
+let writeChain: Promise<void> = Promise.resolve();
+const persistSession = (): Promise<void> => {
+  session.savedAt = new Date().toISOString();
+  const snapshot = JSON.parse(JSON.stringify(session)) as SessionData;
+  writeChain = writeChain
+    .catch(() => undefined)
+    .then(() => saveSession(userData(), snapshot))
+    .catch((err) => console.error('[md] session write failed', err));
+  return writeChain;
+};
 
 const entryFor = (e: IpcMainInvokeEvent): WindowEntry | undefined => {
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -101,10 +112,7 @@ const boundsOf = (win: BrowserWindow): SessionWindow => ({
 
 const writeSession = () => {
   clearTimeout(writeTimer);
-  writeTimer = setTimeout(() => {
-    session.savedAt = new Date().toISOString();
-    void saveSession(userData(), session);
-  }, 300);
+  writeTimer = setTimeout(() => void persistSession(), 300);
 };
 
 const upsertWindowData = (
@@ -351,8 +359,7 @@ ipcMain.handle('session:save', async (e, report: WindowReport) => {
   upsertWindowData(entry.sessionId, { ...rest, window: boundsOf(entry.win) });
   // Written at once (not debounced): this may be the last call before the process exits.
   clearTimeout(writeTimer);
-  session.savedAt = new Date().toISOString();
-  await saveSession(userData(), session);
+  await persistSession();
 });
 ipcMain.handle('draft:write', (_e, a: { id: string; text: string }) =>
   writeDraft(userData(), a.id, a.text),
@@ -474,6 +481,5 @@ app.on('child-process-gone', (_e, details) =>
 app.on('window-all-closed', () => {
   if (process.platform === 'darwin') return;
   clearTimeout(writeTimer);
-  session.savedAt = new Date().toISOString();
-  void saveSession(userData(), session).finally(() => app.quit());
+  void persistSession().finally(() => app.quit());
 });

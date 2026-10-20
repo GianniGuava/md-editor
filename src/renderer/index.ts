@@ -355,7 +355,11 @@ async function boot(): Promise<void> {
         return;
       }
     }
-    await session.flush();
+    try {
+      await session.flush();
+    } catch (err) {
+      console.error('[md] flush before close failed', err);
+    }
     await window.md.closeNow();
   });
 
