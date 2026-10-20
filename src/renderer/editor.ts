@@ -33,6 +33,7 @@ import {
   syntaxTree,
 } from '@codemirror/language';
 import { buildVisibleMap, type SkipRange, type VisibleMap } from './caretMap';
+import { searchCount } from './searchCount';
 import { tags } from '@lezer/highlight';
 
 /**
@@ -194,6 +195,7 @@ export function createEditor(opts: EditorOptions): EditorHandle {
     ]),
     search({ top: true }),
     highlightSelectionMatches(),
+    searchCount,
     keymap.of([
       ...searchKeymap,
       ...defaultKeymap,

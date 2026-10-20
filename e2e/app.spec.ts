@@ -132,6 +132,9 @@ test('opens a file, edits in a new tab, switches panes, restores the session', a
     await expect(page.locator('.cm-panel.cm-search')).toBeVisible();
     await page.keyboard.type('world');
     await expect(page.locator('.cm-searchMatch')).toHaveCount(1);
+    await expect(page.locator('.cm-search-count')).toHaveText('1 match');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.cm-search-count')).toHaveText('1 of 1');
     await page.keyboard.press('Escape');
     await expect(page.locator('.cm-panel.cm-search')).toHaveCount(0);
     // Word selection with Ctrl+Shift+Left (user report).

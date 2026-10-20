@@ -741,3 +741,12 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 .cm-editor .cm-selectionMatch-main {
   background: transparent;
 }
+
+/* Match counter next to the find field (searchCount.ts) */
+.cm-editor .cm-search-count {
+  display: inline-block;
+  min-width: 10ch;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
