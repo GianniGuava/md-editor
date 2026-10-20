@@ -99,6 +99,13 @@ export function buildMenu(state: MenuState, actions: MenuActions): void {
           checked: true,
           click: (item) => send({ name: 'scrollSync', checked: item.checked }),
         },
+        {
+          label: 'Freeze table &headers',
+          type: 'checkbox',
+          checked: true,
+          click: (item) =>
+            send({ name: 'freezeHeaders', checked: item.checked }),
+        },
         { type: 'separator' },
         {
           label: '&Theme',

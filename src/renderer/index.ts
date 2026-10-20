@@ -215,6 +215,7 @@ async function boot(): Promise<void> {
           savedText: f.text,
           diskHash: f.hash,
           mtimeMs: f.mtimeMs,
+          eol: f.eol,
         },
         false,
       );
@@ -241,6 +242,7 @@ async function boot(): Promise<void> {
       mtimeMs: d.mtimeMs,
       dirty: d.dirty,
       draftId: d.draftId,
+      eol: d.eol,
       anchor: sel.anchor,
       head: sel.head,
       scrollTop:
@@ -271,6 +273,7 @@ async function boot(): Promise<void> {
         mtimeMs: s.mtimeMs,
         dirty: s.dirty,
         draftId: s.draftId,
+        eol: s.eol ?? '\n',
       },
       false,
     );
@@ -303,7 +306,7 @@ async function boot(): Promise<void> {
     const text = textOf(d);
     const suggested =
       d.path ?? (d.name.endsWith('.md') ? d.name : `${d.name}.md`);
-    const result = await window.md.files.saveAs(suggested, text);
+    const result = await window.md.files.saveAs(suggested, text, d.eol);
     if (!result) return false;
     store.update(d.id, {
       path: result.path,
@@ -319,7 +322,7 @@ async function boot(): Promise<void> {
   const save = async (d: Doc): Promise<boolean> => {
     if (!d.path) return saveAs(d);
     const text = textOf(d);
-    const { hash, mtimeMs } = await window.md.files.save(d.path, text);
+    const { hash, mtimeMs } = await window.md.files.save(d.path, text, d.eol);
     store.update(d.id, {
       savedText: text,
       diskHash: hash,
@@ -462,6 +465,16 @@ async function boot(): Promise<void> {
     () => setHighlight(!highlightOn),
     true,
   );
+  let freezeOn = true;
+  layout.previewPane.classList.add('freeze-headers');
+  const freezeBtn = button(
+    'Freeze headers',
+    '\u22a4',
+    'Keep table header rows visible while scrolling a long table',
+    '',
+    () => setFreeze(!freezeOn),
+    true,
+  );
   const syncBtn = button(
     'Sync scroll',
     '⇅',
@@ -503,6 +516,7 @@ async function boot(): Promise<void> {
       modeButtons.preview,
     ),
     group('Editor options', highlightBtn, syncBtn),
+    group('Preview options', freezeBtn),
   );
 
   function setMode(mode: PaneMode) {
@@ -515,6 +529,12 @@ async function boot(): Promise<void> {
     highlightOn = on;
     editor.setHighlight(on);
     highlightBtn.setAttribute('aria-pressed', String(on));
+    session.touch();
+  }
+  function setFreeze(on: boolean) {
+    freezeOn = on;
+    layout.previewPane.classList.toggle('freeze-headers', on);
+    freezeBtn.setAttribute('aria-pressed', String(on));
     session.touch();
   }
   function setSync(on: boolean) {
@@ -542,6 +562,7 @@ async function boot(): Promise<void> {
       fontSize: zoom.get(),
       highlight: highlightOn,
       scrollSync: sync.isEnabled(),
+      freezeHeaders: freezeOn,
     }),
     applyUi: async (ui) => {
       await theme.set(ui.theme);
@@ -550,6 +571,7 @@ async function boot(): Promise<void> {
       zoom.set(ui.fontSize);
       setHighlight(ui.highlight);
       setSync(ui.scrollSync);
+      setFreeze(ui.freezeHeaders ?? true);
     },
   });
 
@@ -610,6 +632,9 @@ async function boot(): Promise<void> {
         break;
       case 'scrollSync':
         setSync(msg.checked ?? true);
+        break;
+      case 'freezeHeaders':
+        setFreeze(msg.checked ?? true);
         break;
       case 'theme:set':
         void theme.set((msg.value as ThemePref) ?? 'light').then(session.touch);

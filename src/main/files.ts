@@ -15,6 +15,8 @@ export interface FileData {
   text: string;
   hash: string;
   mtimeMs: number;
+  /** Line ending of the file on disk; `text` is always normalised to LF. */
+  eol: '\n' | '\r\n';
 }
 
 export type CloseDecision = 'save' | 'discard' | 'cancel';
@@ -30,11 +32,18 @@ export const hashText = (text: string): string =>
   createHash('sha256').update(text, 'utf8').digest('hex');
 
 export async function readTextFile(p: string): Promise<FileData> {
-  const text = await fs.readFile(p, 'utf8');
+  const raw = await fs.readFile(p, 'utf8');
   const st = await fs.stat(p);
+  // The editor works in LF; remember the file's convention so Save writes it back
+  // unchanged (a CRLF file saved as LF shows as fully modified in git).
+  const crlf = (raw.match(/\r\n/g) ?? []).length;
+  const lf = (raw.match(/\n/g) ?? []).length - crlf;
+  const eol: '\n' | '\r\n' = crlf > lf ? '\r\n' : '\n';
+  const text = raw.replace(/\r\n/g, '\n');
   return {
     path: p,
     name: path.basename(p),
+    eol,
     text,
     hash: hashText(text),
     mtimeMs: st.mtimeMs,
@@ -54,13 +63,19 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function writeTextFileAtomic(
   p: string,
   text: string,
+  eol: '\n' | '\r\n' = '\n',
 ): Promise<{ hash: string; mtimeMs: number }> {
+  // The hash is always of the LF-normalised text, matching readTextFile.
+  const normalised = text.replace(/\r\n/g, '\n');
+  const onDisk =
+    eol === '\r\n' ? normalised.replace(/\n/g, '\r\n') : normalised;
   const key = path.resolve(p);
   const previous = writeQueues.get(key) ?? Promise.resolve();
-  const run = previous.catch(() => undefined).then(() => writeNow(p, text));
+  const run = previous.catch(() => undefined).then(() => writeNow(p, onDisk));
   writeQueues.set(key, run);
   try {
-    return await run;
+    const { mtimeMs } = await run;
+    return { hash: hashText(normalised), mtimeMs };
   } finally {
     if (writeQueues.get(key) === run) writeQueues.delete(key);
   }
@@ -113,15 +128,17 @@ export function registerFileHandlers(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle('file:read', (_e, p: string) => readTextFile(p));
 
-  ipcMain.handle('file:save', (_e, args: { path: string; text: string }) =>
-    writeTextFileAtomic(args.path, args.text),
+  ipcMain.handle(
+    'file:save',
+    (_e, args: { path: string; text: string; eol?: '\n' | '\r\n' }) =>
+      writeTextFileAtomic(args.path, args.text, args.eol ?? '\n'),
   );
 
   ipcMain.handle(
     'file:saveAsDialog',
     async (
       _e,
-      args: { suggestedName: string; text: string },
+      args: { suggestedName: string; text: string; eol?: '\n' | '\r\n' },
     ): Promise<FileData | null> => {
       const win = getWindow();
       const result = await dialog.showSaveDialog(win ?? undefined!, {
@@ -132,11 +149,13 @@ export function registerFileHandlers(getWindow: () => BrowserWindow | null) {
       const { hash, mtimeMs } = await writeTextFileAtomic(
         result.filePath,
         args.text,
+        args.eol ?? '\n',
       );
       return {
         path: result.filePath,
         name: path.basename(result.filePath),
         text: args.text,
+        eol: args.eol ?? '\n',
         hash,
         mtimeMs,
       };

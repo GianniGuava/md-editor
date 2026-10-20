@@ -42,4 +42,30 @@ describe('writeTextFileAtomic / readTextFile', () => {
     expect(texts).toContain((await readTextFile(p)).text);
     expect(await fs.readdir(dir)).toEqual(['session.json']);
   });
+
+  it('reads CRLF files as LF and writes them back as CRLF', async () => {
+    const p = path.join(dir, 'windows.md');
+    await fs.writeFile(p, '# Title\r\n\r\nBody line\r\n', 'utf8');
+    const data = await readTextFile(p);
+    expect(data.eol).toBe('\r\n');
+    expect(data.text).toBe('# Title\n\nBody line\n');
+    const { hash } = await writeTextFileAtomic(
+      p,
+      data.text + 'More\n',
+      data.eol,
+    );
+    expect(await fs.readFile(p, 'utf8')).toBe(
+      '# Title\r\n\r\nBody line\r\nMore\r\n',
+    );
+    expect((await readTextFile(p)).hash).toBe(hash);
+  });
+
+  it('keeps LF files as LF', async () => {
+    const p = path.join(dir, 'unix.md');
+    await fs.writeFile(p, 'a\nb\n', 'utf8');
+    const data = await readTextFile(p);
+    expect(data.eol).toBe('\n');
+    await writeTextFileAtomic(p, data.text, data.eol);
+    expect(await fs.readFile(p, 'utf8')).toBe('a\nb\n');
+  });
 });

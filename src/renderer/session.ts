@@ -127,12 +127,14 @@ export function installSession(deps: SessionDeps): SessionHandle {
       let diskHash: string | null = null;
       let mtimeMs: number | null = null;
       let missing = false;
+      let eol: '\n' | '\r\n' = '\n';
       if (tab.path) {
         try {
           const f = await window.md.files.read(tab.path);
           diskText = f.text;
           diskHash = f.hash;
           mtimeMs = f.mtimeMs;
+          eol = f.eol;
         } catch {
           missing = true;
         }
@@ -167,6 +169,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
           mtimeMs,
           dirty,
           draftId: tab.draft ?? undefined,
+          eol,
         },
         false,
       );

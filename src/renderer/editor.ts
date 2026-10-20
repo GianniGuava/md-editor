@@ -112,7 +112,10 @@ const editorTheme = EditorView.theme({
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text)' },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection':
     { backgroundColor: 'var(--selection)' },
-  '.cm-activeLine': { backgroundColor: 'var(--surface)' },
+  // Translucent: an opaque line background hides the selection layer drawn behind it.
+  '.cm-activeLine': {
+    backgroundColor: 'color-mix(in srgb, var(--text) 5%, transparent)',
+  },
   '.cm-gutters': {
     backgroundColor: 'var(--surface)',
     color: 'var(--text2)',

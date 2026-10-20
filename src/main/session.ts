@@ -43,6 +43,8 @@ export interface WindowUi {
   fontSize: number;
   highlight: boolean;
   scrollSync: boolean;
+  /** Optional so sessions written before 2026-10-19 stay valid (default on). */
+  freezeHeaders?: boolean;
 }
 
 export interface SessionWindowData extends WindowUi {

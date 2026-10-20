@@ -43,6 +43,7 @@ export type AppCommand =
   | 'mode:preview'
   | 'highlight'
   | 'scrollSync'
+  | 'freezeHeaders'
   | 'zoom:in'
   | 'zoom:out'
   | 'zoom:reset'
@@ -77,6 +78,7 @@ export interface DocSnapshot {
   mtimeMs: number | null;
   dirty: boolean;
   draftId: string;
+  eol?: '\n' | '\r\n';
   anchor: number;
   head: number;
   scrollTop: number;
@@ -102,10 +104,15 @@ const api = {
     save: (
       path: string,
       text: string,
+      eol?: '\n' | '\r\n',
     ): Promise<{ hash: string; mtimeMs: number }> =>
-      ipcRenderer.invoke('file:save', { path, text }),
-    saveAs: (suggestedName: string, text: string): Promise<FileData | null> =>
-      ipcRenderer.invoke('file:saveAsDialog', { suggestedName, text }),
+      ipcRenderer.invoke('file:save', { path, text, eol }),
+    saveAs: (
+      suggestedName: string,
+      text: string,
+      eol?: '\n' | '\r\n',
+    ): Promise<FileData | null> =>
+      ipcRenderer.invoke('file:saveAsDialog', { suggestedName, text, eol }),
     /** Files dropped on the window arrive as File objects; this yields their path. */
     pathForFile: (file: File): string => webUtils.getPathForFile(file),
   },

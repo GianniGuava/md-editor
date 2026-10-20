@@ -63,6 +63,7 @@ export function installWatching(deps: WatchingDeps): void {
       savedText: data.text,
       diskHash: data.hash,
       mtimeMs: data.mtimeMs,
+      eol: data.eol,
     });
     if (d.id === store.activeId) {
       const view = editor.view;

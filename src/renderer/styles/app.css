@@ -388,13 +388,15 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   color: var(--text2);
 }
 
-/* Tables keep their natural column widths and scroll sideways inside the measure
-   instead of being squeezed into it (ENGINEERING; prose measure D-2 is for prose). */
+/* Tables keep their natural column widths and scroll sideways inside the pane
+   instead of being squeezed into the prose measure (ENGINEERING; D-2 is for prose).
+   Separate borders so a frozen header keeps its own lines when it sticks. */
 .preview-body table {
   display: block;
   max-width: 100%;
   overflow-x: auto;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   scrollbar-width: thin;
 }
 
@@ -403,17 +405,42 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   min-width: 6ch;
   overflow-wrap: normal;
   vertical-align: top;
-}
-
-.preview-body th,
-.preview-body td {
-  border: 1px solid var(--border);
   padding: var(--space-1) var(--space-2);
   text-align: left;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-body tr > :first-child {
+  border-left: 1px solid var(--border);
+}
+
+.preview-body thead tr:first-child > *,
+.preview-body table > tbody:first-child > tr:first-child > * {
+  border-top: 1px solid var(--border);
 }
 
 .preview-body th {
   background: var(--surface);
+}
+
+/* Freeze table headers (user request 2026-10-19; View menu and toolbar toggle).
+   A table taller than the pane becomes its own viewport with a sticky header row;
+   --table-viewport and --thead-h are measured in preview.ts. */
+#preview-pane.freeze-headers .preview-body table {
+  max-height: var(--table-viewport, 70vh);
+  overflow: auto;
+}
+
+#preview-pane.freeze-headers .preview-body thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+#preview-pane.freeze-headers .preview-body tbody tr {
+  scroll-margin-top: var(--thead-h, 2.5em);
 }
 
 .preview-body img {
@@ -685,8 +712,9 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   accent-color: var(--accent);
 }
 
+/* Mark backgrounds sit above the selection layer, so they must be translucent. */
 .cm-editor .cm-searchMatch {
-  background: var(--selection);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .cm-editor .cm-searchMatch.cm-searchMatch-selected {
@@ -694,5 +722,10 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
 }
 
 .cm-editor .cm-selectionMatch {
-  background: var(--surface2);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* The selection itself is also tagged as a match; let the selection colour show. */
+.cm-editor .cm-selectionMatch-main {
+  background: transparent;
 }

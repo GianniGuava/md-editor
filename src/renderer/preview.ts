@@ -73,10 +73,29 @@ export interface PreviewHandle {
   visibleOffsetAt(point: { x: number; y: number }): number | null;
 }
 
+/** The table around an element when that table scrolls vertically (frozen headers). */
+export function scrollingTable(el: Element): HTMLTableElement | null {
+  const t = el.closest('table');
+  return t && t.scrollHeight > t.clientHeight + 1 ? t : null;
+}
+
 export function createPreview(parent: HTMLElement): PreviewHandle {
   const article = document.createElement('article');
   article.className = 'preview-body';
   parent.appendChild(article);
+
+  // Table viewports fit the pane; each table records its header height so rows
+  // scrolled into view land below the frozen header.
+  const measureTables = () => {
+    parent.style.setProperty(
+      '--table-viewport',
+      `${Math.max(160, parent.clientHeight - 32)}px`,
+    );
+    for (const t of article.querySelectorAll<HTMLTableElement>('table')) {
+      t.style.setProperty('--thead-h', `${t.tHead?.offsetHeight ?? 0}px`);
+    }
+  };
+  new ResizeObserver(measureTables).observe(parent);
 
   let clickHandler:
     | ((line: number, point: { x: number; y: number }) => void)
@@ -138,6 +157,7 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
     scroller: parent,
     render(source) {
       article.innerHTML = renderMarkdown(source);
+      measureTables();
     },
     highlightLine(line, keepInView = false) {
       const current = article.querySelector<HTMLElement>('.active-block');
@@ -151,7 +171,20 @@ export function createPreview(parent: HTMLElement): PreviewHandle {
           // ancestor (a table for its rows), not to the scrolling pane.
           const r = next.getBoundingClientRect();
           const v = parent.getBoundingClientRect();
-          if (r.top < v.top || r.bottom > v.bottom) {
+          let top = v.top;
+          let bottom = v.bottom;
+          // Inside a scrolling table the visible band is the table's own viewport,
+          // minus the frozen header for body rows.
+          const t = next.tagName === 'TABLE' ? null : scrollingTable(next);
+          if (t) {
+            const tr = t.getBoundingClientRect();
+            const header = next.closest('thead')
+              ? 0
+              : (t.tHead?.offsetHeight ?? 0);
+            top = Math.max(top, tr.top + header);
+            bottom = Math.min(bottom, tr.bottom);
+          }
+          if (r.top < top || r.bottom > bottom) {
             next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
           }
         }

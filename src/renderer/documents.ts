@@ -19,6 +19,8 @@ export interface Doc {
   scrollTop: number;
   /** Stable id for the draft file in userData/drafts (step 6). */
   draftId: string;
+  /** Line ending to write back on Save (the editor always works in LF). */
+  eol: '\n' | '\r\n';
 }
 
 export interface ClosedDoc {
@@ -69,9 +71,10 @@ export class DocStore {
   }
 
   add(
-    doc: Omit<Doc, 'id' | 'dirty' | 'scrollTop' | 'draftId'> & {
+    doc: Omit<Doc, 'id' | 'dirty' | 'scrollTop' | 'draftId' | 'eol'> & {
       dirty?: boolean;
       draftId?: string;
+      eol?: '\n' | '\r\n';
     },
     activate = true,
   ): Doc {
@@ -81,6 +84,7 @@ export class DocStore {
       dirty: doc.dirty ?? false,
       scrollTop: 0,
       draftId: doc.draftId ?? crypto.randomUUID(),
+      eol: doc.eol ?? '\n',
     };
     this.docs.set(full.id, full);
     this.order.push(full.id);
