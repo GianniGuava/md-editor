@@ -3,7 +3,7 @@ import './styles/app.css';
 import { EditorSelection } from '@codemirror/state';
 import { createEditor } from './editor';
 import { createPreview } from './preview';
-import { createLayout, type PaneMode } from './layout';
+import { createLayout, type OrientationPref, type PaneMode } from './layout';
 import { createScrollSync } from './scrollSync';
 import { createZoom } from './zoom';
 import { DocStore, type Doc } from './documents';
@@ -77,7 +77,9 @@ async function boot(): Promise<void> {
 
   const zoom = createZoom();
   const store = new DocStore();
-  const layout = createLayout(document.getElementById('workspace')!);
+  const layout = createLayout(document.getElementById('workspace')!, {
+    orientation: info.defaultOrientation ?? 'columns',
+  });
   const preview = createPreview(layout.previewPane);
   const banners = createBanners(document.getElementById('banners')!);
 
@@ -562,6 +564,7 @@ async function boot(): Promise<void> {
       highlight: highlightOn,
       scrollSync: sync.isEnabled(),
       freezeHeaders: freezeOn,
+      orientation: layout.getOrientation(),
     }),
     applyUi: async (ui) => {
       await theme.set(ui.theme);
@@ -571,6 +574,9 @@ async function boot(): Promise<void> {
       setHighlight(ui.highlight);
       setSync(ui.scrollSync);
       setFreeze(ui.freezeHeaders ?? true);
+      layout.setOrientation(
+        ui.orientation ?? info.defaultOrientation ?? 'columns',
+      );
     },
   });
 
@@ -625,6 +631,9 @@ async function boot(): Promise<void> {
         break;
       case 'mode:preview':
         setMode('preview');
+        break;
+      case 'layout:set':
+        layout.setOrientation((msg.value as OrientationPref) ?? 'auto');
         break;
       case 'highlight':
         setHighlight(msg.checked ?? true);

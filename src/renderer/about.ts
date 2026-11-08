@@ -13,7 +13,7 @@ export function createAboutDialog(info: {
     <form method="dialog" class="about-form">
       <div class="about-logo" aria-hidden="true">${logoSvg}</div>
       <h2 id="about-title">${info.name}</h2>
-      <p>Version ${info.version} · Electron ${info.electron}</p>
+      <p>Version ${info.version}${info.electron ? ` · Electron ${info.electron}` : ''}</p>
       <p class="about-small">Logo set in EB Garamond, SIL Open Font License 1.1.
         Editor: CodeMirror 6. Preview: markdown-it and DOMPurify.</p>
       <button type="submit" class="tool primary" autofocus>Close</button>

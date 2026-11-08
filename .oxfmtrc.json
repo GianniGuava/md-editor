@@ -10,6 +10,7 @@
     "node_modules/**",
     ".vite/**",
     "out/**",
-    "README.md"
+    "README.md",
+    "web/dist/**"
   ]
 }

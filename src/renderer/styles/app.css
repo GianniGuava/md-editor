@@ -300,6 +300,27 @@ body.show-keys [data-keys]:not([data-keys=''])::after {
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   cursor: col-resize;
+  touch-action: none; /* dragging the bar must not scroll the page on touch screens */
+}
+
+/* Stacked panes: editor above, preview below (PLAN.md §35, D-28). The split variable
+   becomes the editor's height and the separator turns horizontal. */
+#panes[data-orientation='rows'] {
+  grid-template-columns: 1fr;
+  grid-template-rows: var(--split) 8px 1fr;
+}
+
+#panes[data-orientation='rows'][data-mode='editor'],
+#panes[data-orientation='rows'][data-mode='preview'] {
+  grid-template-rows: 1fr;
+}
+
+#panes[data-orientation='rows'] #splitter {
+  border-left: 0;
+  border-right: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: row-resize;
 }
 
 #splitter:focus-visible {

@@ -21,6 +21,8 @@ export interface AppInfo {
   systemTheme: 'light' | 'dark';
   /** BrowserWindow id of this renderer's window; used to tag cross-window drags. */
   windowId: number;
+  /** Pane orientation when the session has none (PLAN.md §35). Desktop leaves it unset: columns. */
+  defaultOrientation?: 'auto' | 'columns' | 'rows';
 }
 
 export type AppCommand =
@@ -41,6 +43,7 @@ export type AppCommand =
   | 'mode:editor'
   | 'mode:split'
   | 'mode:preview'
+  | 'layout:set'
   | 'highlight'
   | 'scrollSync'
   | 'freezeHeaders'

@@ -45,6 +45,8 @@ export interface WindowUi {
   scrollSync: boolean;
   /** Optional so sessions written before 2026-10-19 stay valid (default on). */
   freezeHeaders?: boolean;
+  /** Pane orientation (PLAN.md §35). Optional so older sessions stay valid (default columns). */
+  orientation?: 'auto' | 'columns' | 'rows';
 }
 
 export interface SessionWindowData extends WindowUi {

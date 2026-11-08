@@ -52,11 +52,12 @@ fs.mkdirSync(assets, { recursive: true });
 fs.writeFileSync(path.join(assets, 'logo.svg'), svg);
 
 const pngs = [];
-for (const px of [16, 24, 32, 48, 64, 128, 256, 512]) {
+// 180 is the iOS Home Screen icon, 192 the web manifest icon (PLAN.md §35).
+for (const px of [16, 24, 32, 48, 64, 128, 180, 192, 256, 512]) {
   const png = new Resvg(svg, { fitTo: { mode: 'width', value: px } }).render().asPng();
   const file = path.join(assets, `logo-${px}.png`);
   fs.writeFileSync(file, png);
-  if (px <= 256) pngs.push(file);
+  if (px <= 256 && px !== 180 && px !== 192) pngs.push(file);
 }
 const ico = await pngToIco(pngs);
 fs.writeFileSync(path.join(assets, 'app.ico'), ico);

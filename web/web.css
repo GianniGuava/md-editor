@@ -1,0 +1,162 @@
+/* Browser build overrides (PLAN.md §35). Tokens only; no colour literals. */
+
+/* The page height follows the visual viewport, so the on-screen keyboard never covers
+   the preview (viewport.ts sets --vv-height). */
+html,
+body {
+  height: var(--vv-height, 100%);
+}
+
+/* The body grid has no column template; without a floor of 0 the single column grows to the
+   toolbar's unwrapped width and the whole page scrolls sideways on a phone. */
+body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Phones: one scrolling row of tools keeps every label (D-15) without eating the screen. */
+@media (max-width: 600px) {
+  #toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .toolbar-group {
+    flex: 0 0 auto;
+  }
+
+  .toolbar-group + .toolbar-group {
+    margin-left: var(--space-2);
+  }
+}
+
+/* One window only in the browser (D-33). */
+#toolbar .tool[title^='New window'] {
+  display: none;
+}
+
+/* Touch screens: the 8 px splitter gets a 44 px hit area without growing on screen
+   (WCAG 2.5.8 target size; the hit area overlaps the pane edges). */
+@media (pointer: coarse) {
+  #splitter {
+    position: relative;
+    z-index: 1;
+  }
+
+  #splitter::before {
+    content: '';
+    position: absolute;
+    inset: 0 -18px;
+  }
+
+  #panes[data-orientation='rows'] #splitter::before {
+    inset: -18px 0;
+  }
+}
+
+/* Print root (print.ts): hidden on screen, the only thing printed. */
+#print-root {
+  display: none;
+}
+
+/* ---- Browser dialogs: save, confirm close, menu ---- */
+.web-dialog {
+  width: min(520px, 92vw);
+  max-height: 90vh;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.web-dialog::backdrop {
+  background: rgb(0 0 0 / 0.4);
+}
+
+.web-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.web-form h2 {
+  margin: 0;
+  font-size: 1.2em;
+}
+
+.web-form p {
+  margin: 0;
+}
+
+.web-hint,
+.web-status {
+  color: var(--text2);
+  font-size: 0.9em;
+}
+
+.web-status {
+  min-height: 1.5em;
+}
+
+.web-form input[type='text'] {
+  min-height: var(--target-min);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.web-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.web-menu .web-form {
+  gap: var(--space-2);
+}
+
+.web-menu section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.web-menu h3 {
+  margin: 0 0 var(--space-1);
+  font-size: 0.85em;
+  color: var(--text2);
+}
+
+.web-menu-item {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.web-menu-item .keys {
+  margin-left: auto;
+  padding-left: var(--space-2);
+  color: var(--text2);
+  font-family: var(--font-editor);
+  font-size: 0.8em;
+}
+
+.web-menu-radio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.web-menu-radio-label {
+  flex: 0 0 100%;
+  font-size: 0.85em;
+  color: var(--text2);
+}

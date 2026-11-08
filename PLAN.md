@@ -287,6 +287,18 @@ Each row: what was decided, the evidence tag, the source, and what the source ac
 | D-26 | PDF through Electron `printToPDF`; DOCX and others through Pandoc; Pandoc PDF only when an engine is detected | VENDOR | Electron docs for `printToPDF`; Pandoc manual for formats and `--pdf-engine`; neither Pandoc nor a LaTeX engine is installed on this machine, confirmed 2026-10-16. |
 | D-27 | File watching through chokidar with atomic-save handling and polling fallback on network paths | VENDOR | chokidar README (`atomic`, `awaitWriteFinish`, polling backend); Node `fs.watch` caveats (inconsistent across platforms, unreliable on SMB). Version drift to re-check at build time: chokidar 5.0.0 on npm vs v6 README. |
 
+### Browser build for phones (§35, 2026-10-30)
+
+| ID | Decision | Tag | Source and what it supports |
+|---|---|---|---|
+| D-28 | Pane orientation: editor above preview ("rows") on portrait or sub-600 px viewports, side by side otherwise; "auto" is the web default, the desktop keeps columns; user override in the menu | STANDARD + ENGINEERING + H-17 | WCAG 2.2 1.4.10 (reflow at 320 CSS px without two-way scrolling): two side-by-side panes on a 390 px phone would each be under 200 px. No study compares stacked and side-by-side live preview on phones (H-17). D-14 (keep the rendered result visible) carries over. |
+| D-29 | No document library in the browser: documents live in the open tabs and the session drafts (D-22, D-23); Import copies a chosen file; Save as records what was shared; records no tab refers to are pruned on each session write | USER + ENGINEERING | User decision 2026-10-30 ("just an editor and preview screen"). iOS Safari has no File System Access API (WebKit position: oppose), so a chosen file can be read once, never written back. |
+| D-30 | Save and Save as mean "share or download": Web Share with files when `navigator.canShare` allows it, otherwise a download; the shared text is recorded so the dirty marker means "changed since last shared" | VENDOR + ENGINEERING | W3C Web Share API (`navigator.share({ files })`, user activation required, hence no `await` before the call). The share-sheet behaviour on iOS is to be confirmed on the device (§35 checklist). |
+| D-31 | Export in the browser: HTML shared or downloaded; PDF through the print sheet with a print-only root and the light palette forced; Pandoc reported absent with no install path, so the dialog hides those rows | VENDOR + ENGINEERING | No `printToPDF` outside Electron; iOS's print sheet offers Save to Files as PDF (to confirm on device). `@page size` follows the dialog's page size. |
+| D-32 | Commands without a native menu: a "Menu" dialog at the end of the toolbar lists every menu command with its shortcut; hardware-keyboard accelerators are mapped to the same commands; Ctrl+T, Ctrl+W and Ctrl+Tab may be taken by the browser first | CITED (D-16) + ENGINEERING | Lane et al. 2005 and Grossman et al. 2007 as in D-16: show shortcuts on the commands. Browser-reserved keys are outside page control (VENDOR: browser behaviour). |
+| D-33 | One window in the browser: new window, tab tear-off, file watching, startup files and the close handshake are inert (events never fire; a tear-off rejects so the tab stays); the renderer flushes the session on `visibilitychange` and `pagehide` via its blur handler | ENGINEERING | iOS gives no reliable unload hook; D-23's 500 ms drafts are the safety net, as on the desktop. |
+| D-34 | Installable web app: manifest, Home Screen icons from the logo, a hand-written service worker that precaches this build's hashed assets (cache-first) and serves navigations network-first with the cached shell as offline fallback | VENDOR + ENGINEERING | Service Worker and Web App Manifest specs (MDN). WebKit deletes script-writable storage after seven days without interaction for sites in Safari; Home Screen web apps keep their own counter (WebKit blog, 2020-03-24), so installing is the durability advice. Workbox was dropped: its generator crashed (SIGILL) on the dev machine, and a sixty-line worker is easier to own. |
+
 ---
 
 ## 9. Review items (all decided 2026-10-16; answers in §12)
@@ -331,6 +343,8 @@ Each row: what was decided, the evidence tag, the source, and what the source ac
 | H-13 | Garamond-style serif legibility for on-screen UI text at modern resolutions | Bernard 2001 (did not test Garamond), Tinker | Garamond kept to the logo. |
 | H-14 | Linear vs tree undo in prose editors | ICSE/CHI | Linear chosen. |
 | H-15 | Peer-reviewed replication of icon-label studies after 1999 | BIT, CHI | Rests on Wiedenbeck 1999 and Kacmar & Carey 1991. |
+
+- **H-17** (added 2026-10-30): stacked versus side-by-side live preview on phone-sized screens. No study found; D-28 rests on WCAG reflow arithmetic and the portrait aspect ratio.
 
 ---
 
@@ -575,3 +589,28 @@ Verified with a scripted measurement on a document with rows taller than the pan
 ## 34. Match counter in find (2026-10-20)
 
 User request: a count in the Ctrl+F panel. `src/renderer/searchCount.ts` adds a counter beside the find field: "3 of 12" when the selection is on a match, "12 matches" otherwise, "1 match", "No matches", or "Invalid pattern" for a broken regular expression; it follows the panel's case, regexp and whole-word options because it counts with CodeMirror's own search query. It is a polite live region so screen readers announce changes. Counting stops at 10,000 ("10000+ matches") to stay responsive (ENGINEERING). Unit test for the wording; e2e asserts "1 match" then "1 of 1".
+
+## 35. Browser build for phones (2026-10-30)
+
+User request: the editor on an iPhone, editor on top and preview below, mainly to read Markdown written by Claude and others; no document library ("keep everything in my home lab"); hosted on the user's own domain rather than GitHub Pages. Earlier drafts (a Python app in the Pocket Python repo, a copy of the renderer in another repo) were set aside in favour of a second build target in this repo, so desktop and phone share one renderer.
+
+**Seam.** The renderer's only view of the outside world is `window.md`, the `MdApi` object the preload exposes; its imports from `main/` and `preload/` are type-only. The browser build (`web/`) installs a browser implementation of the same interface (`web/api.ts`) and then imports `src/renderer/index.ts` unchanged. Renderer changes were limited to: an orientation option in `layout.ts` with matching CSS (D-28), an optional `orientation` in the session's `WindowUi`, a `layout:set` command and `defaultOrientation` in `AppInfo`, the About dialog omitting the Electron line when empty, and the export dialog hiding Pandoc rows when there is no install path (D-31).
+
+| `MdApi` group | Browser behaviour (`web/api.ts`) |
+|---|---|
+| `files.openDialog`, `read` | File chooser (`web/filePicker.ts`); each file is copied into the IndexedDB "disk" under `Imported/<name>` (D-29). Dropped files are imported on `read` through a token from `pathForFile`. |
+| `files.save`, `saveAs` | Save dialog (`web/dialogs.ts`): Share… or Download (D-30). Save keeps the record's path; Save as writes `Shared/<name>`. Cancel rejects `save` (the renderer treats it as not saved) and returns null from `saveAs`. |
+| `session.*`, drafts, `theme.*` | IndexedDB through idb-keyval (`web/storage.ts`); one window entry; `prefers-color-scheme` for System. Records not in any open tab are pruned on each session write. |
+| `onCommand` | Fed by the Menu dialog and the accelerator map (`web/commands.ts`, D-32). |
+| `export.*` | HTML via the save dialog; PDF via `web/print.ts` and `window.print()`; Pandoc absent (D-31). |
+| `confirmClose` | In-app Save / Don't save / Cancel dialog (D-21 kept). |
+| watching, windows, startup files, close handshake | Inert (D-33). |
+
+**Layout and phone details.** Rows orientation on narrow or portrait viewports (D-28); `touch-action: none` on the splitter and a 44 px hit area on coarse pointers; the page height follows `visualViewport` so the iOS keyboard does not cover the preview (`web/viewport.ts`); on phones the toolbar is one scrolling row so every label stays (D-15); the "New window" button is hidden.
+
+**Build and hosting.** `vite.web.config.mts` (root `web/`, output `web/dist`): a plugin serves and emits the logo files from `assets/` (180 px Home Screen icon and 192 px manifest icon added to `tools/build-logo.mjs`), writes `manifest.webmanifest`, and compiles `web/sw.ts` into `sw.js` with this build's asset list (D-34). `web/public/_headers` carries the Content-Security-Policy (the desktop policy minus `file:` and the dev-server sources, plus `img-src https:` so documents from others may show web images) and `X-Robots-Tag: noindex`. `wrangler.jsonc` names the Worker `md-web` and serves `web/dist` as static assets; Cloudflare Workers Builds runs `npm run check && npm run build:web` so a failing test blocks a deploy. The Electron package is unaffected: Forge's Vite plugin packages only `.vite/`.
+
+**Verification (2026-10-30).** `npm run check`: typecheck, lint and 97 unit tests pass, including new tests for the web storage, line endings, print CSS, accelerator map and file-name cleaning. `npm run build:web` produces the app, `sw.js` and the manifest. End-to-end (`npm run test:e2e:web`, Playwright at an iPhone 13 viewport in Chromium), 6 of 6 passing: stacked panes, typing reaches the preview, splitter Up/Down, import and Save as download, Save as naming and menu theme and layout, session restore across a reload, axe-core scan. Two findings on the way: the body grid needed `minmax(0, 1fr)` or the unwrapped phone toolbar widened the page (fixed in `web/web.css`), and a browser with no fonts installed makes CodeMirror insert every character at position 0 on its own line (an environment fault, not the app; noted in the README). The README lists the device checks Chromium cannot cover.
+
+**Open items.** H-17 (above). R-23: confirm on an iPhone that `navigator.share` with a Markdown file opens the share sheet from the Save dialog, that the print sheet offers Save to Files, and that typing with the on-screen keyboard keeps the preview visible; adjust `viewport.ts` if Safari still scrolls the page. R-24: the orientation override is in the browser menu only; the desktop View menu could gain it.
+
