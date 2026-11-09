@@ -75,4 +75,15 @@ describe('cleanName', () => {
     expect(cleanName('out', 'doc.html')).toBe('out.html');
     expect(cleanName('out.txt', 'doc.md')).toBe('out.txt');
   });
+
+  it('treats only text extensions as extensions (scan finding A-F9)', () => {
+    expect(cleanName('v1.2', 'x.md')).toBe('v1.2.md');
+    expect(cleanName('meeting 2026.11.08', 'x.md')).toBe(
+      'meeting 2026.11.08.md',
+    );
+    expect(cleanName('notes.', 'x.md')).toBe('notes.md');
+    expect(cleanName('..', 'Untitled-1.md')).toBe('Untitled-1.md');
+    expect(cleanName('Notes.MARKDOWN', 'x.md')).toBe('Notes.MARKDOWN');
+    expect(cleanName('page.htm', 'doc.html')).toBe('page.htm');
+  });
 });

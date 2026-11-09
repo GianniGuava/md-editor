@@ -245,3 +245,96 @@ test('a save whose record cannot be written says so instead of failing silently'
   await expect(page.locator('#banners')).toContainText('could not record');
   await expect(page.getByRole('tab').first()).toContainText('(modified)');
 });
+
+const importBytes = async (page: Page, name: string, bytes: number[]) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'md-web-'));
+  const p = path.join(dir, name);
+  await fs.writeFile(p, Buffer.from(bytes));
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await (await chooser).setFiles(p);
+  await expect(page.getByRole('tab', { name: new RegExp(name) })).toBeVisible();
+};
+
+const saveDownload = async (page: Page) => {
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page
+    .locator('dialog.web-dialog')
+    .getByRole('button', { name: 'Download' })
+    .click();
+  const d = await download;
+  return {
+    name: d.suggestedFilename(),
+    bytes: await fs.readFile((await d.path())!),
+  };
+};
+
+test('a file with a byte-order mark is handed back byte for byte', async ({
+  page,
+}) => {
+  const original = [
+    0xef, 0xbb, 0xbf, 0x23, 0x20, 0x54, 0x0d, 0x0a, 0x63, 0x61, 0x66, 0xc3,
+    0xa9, 0x0d, 0x0a,
+  ];
+  await importBytes(page, 'bom.md', original);
+  expect([...(await saveDownload(page)).bytes]).toEqual(original);
+});
+
+test('a Windows-1252 file shows its accents and says how it was read', async ({
+  page,
+}) => {
+  await importBytes(page, 'old.txt', [0x23, 0x20, 0x63, 0x61, 0x66, 0xe9]);
+  await expect(page.locator('#preview-pane h1')).toHaveText('café');
+  await expect(page.locator('#banners')).toContainText('Windows-1252');
+  // Saved as UTF-8: é is two bytes.
+  expect([...(await saveDownload(page)).bytes]).toEqual([
+    0x23, 0x20, 0x63, 0x61, 0x66, 0xc3, 0xa9,
+  ]);
+});
+
+test('pressing return in the Save as name field saves', async ({ page }) => {
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Words');
+  await page.locator('#menu-button').click();
+  await page
+    .locator('#menu-dialog')
+    .getByRole('button', { name: 'Save as…' })
+    .click();
+  const save = page.locator('dialog.web-dialog').last();
+  await save.getByLabel('File name').fill('typed-name');
+  const download = page.waitForEvent('download');
+  await save.getByLabel('File name').press('Enter');
+  expect((await download).suggestedFilename()).toBe('typed-name.md');
+  await expect(page.getByRole('tab').first()).not.toContainText('(modified)');
+});
+
+test('save as a name another tab already uses keeps the name the user typed', async ({
+  page,
+}) => {
+  const saveAs = async (name: string) => {
+    await page.locator('#menu-button').click();
+    await page
+      .locator('#menu-dialog')
+      .getByRole('button', { name: 'Save as…' })
+      .click();
+    const save = page.locator('dialog.web-dialog').last();
+    await save.getByLabel('File name').fill(name);
+    const download = page.waitForEvent('download');
+    await save.getByRole('button', { name: 'Download' }).click();
+    return (await download).suggestedFilename();
+  };
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('First');
+  expect(await saveAs('b.md')).toBe('b.md');
+  await page.getByRole('button', { name: 'New', exact: true }).click();
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Second');
+  expect(await saveAs('b.md')).toBe('b.md');
+  await expect(page.getByRole('tab').nth(1)).toContainText('b.md');
+  await expect(page.getByRole('tab').nth(1)).not.toContainText('(2)');
+  // A later Save of the second tab still hands out "b.md".
+  await page.locator('.cm-content').click();
+  await page.keyboard.type(' again');
+  expect((await saveDownload(page)).name).toBe('b.md');
+});

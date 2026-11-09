@@ -146,6 +146,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
       let mtimeMs: number | null = null;
       let missing = false;
       let eol: '\n' | '\r\n' = '\n';
+      let encoding: string | undefined;
       if (tab.path) {
         try {
           const f = await window.md.files.read(tab.path);
@@ -153,6 +154,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
           diskHash = f.hash;
           mtimeMs = f.mtimeMs;
           eol = f.eol;
+          encoding = f.encoding;
         } catch {
           missing = true;
         }
@@ -214,6 +216,13 @@ export function installSession(deps: SessionDeps): SessionHandle {
                     },
                   },
                 ],
+        });
+      }
+      if (encoding) {
+        deps.banners.show({
+          key: `encoding:${tab.name}`,
+          message: `"${tab.name}" is not UTF-8 text, so it was read as ${encoding === 'windows-1252' ? 'Windows-1252 (Western European)' : encoding}. Check that accented letters look right; saving writes the file as UTF-8.`,
+          actions: [],
         });
       }
       if (missing) {

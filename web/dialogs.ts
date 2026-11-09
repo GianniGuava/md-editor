@@ -42,14 +42,20 @@ export function shareSupported(mime = 'text/markdown'): boolean {
   }
 }
 
-/** Keep the typed name usable as a file name; fall back to the suggested extension. */
+/** Extensions the app writes or reads; anything else after a dot is part of the name. */
+const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt|html?)$/i;
+
+/**
+ * Keep the typed name usable as a file name and make sure it ends in a text extension:
+ * "v1.2" or "meeting 2026.11.08" get the suggested one added (scan finding A-F9).
+ */
 export function cleanName(typed: string, suggested: string): string {
-  let name = typed.trim().replace(/[\\/:*?"<>|]+/g, '-');
+  let name = typed
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/[. ]+$/, '');
   if (!name) name = suggested;
-  if (!/\.[A-Za-z0-9]{1,8}$/.test(name)) {
-    const ext = suggested.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? '.md';
-    name += ext;
-  }
+  if (!TEXT_EXT.test(name)) name += suggested.match(TEXT_EXT)?.[0] ?? '.md';
   return name;
 }
 
@@ -106,6 +112,13 @@ export function saveFile(req: SaveRequest): Promise<SaveChoice | null> {
     dlg
       .querySelector('[data-act=cancel]')!
       .addEventListener('click', () => finish(null));
+    // Return in the name field (the phone keyboard's Go key) submits the form, which would
+    // close the dialog without saving; run the primary action instead (finding A-F8). The
+    // key press counts as the user gesture Share needs.
+    dlg.querySelector('form')!.addEventListener('submit', (e) => {
+      e.preventDefault();
+      dlg.querySelector<HTMLButtonElement>('.tool.primary')?.click();
+    });
 
     dlg.querySelector('[data-act=download]')!.addEventListener('click', () => {
       const name = cleanName(nameInput.value, req.suggestedName);

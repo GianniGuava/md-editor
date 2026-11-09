@@ -194,6 +194,14 @@ async function boot(): Promise<void> {
       store.remove(list[0].id, false);
   };
 
+  /** A file that was not UTF-8 was read as `encoding` (src/main/decodeText.ts). */
+  const warnEncoding = (name: string, encoding: string) =>
+    banners.show({
+      key: `encoding:${name}`,
+      message: `"${name}" is not UTF-8 text, so it was read as ${encoding === 'windows-1252' ? 'Windows-1252 (Western European)' : encoding}. Check that accented letters look right; saving writes the file as UTF-8.`,
+      actions: [],
+    });
+
   const openFiles = (files: FileData[]) => {
     if (files.length === 0) return;
     stash();
@@ -220,6 +228,7 @@ async function boot(): Promise<void> {
         },
         false,
       );
+      if (f.encoding) warnEncoding(f.name, f.encoding);
     }
     if (blank) store.remove(blank.id, false);
     if (last) store.activate(last.id);

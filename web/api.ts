@@ -6,6 +6,7 @@ import type {
   MdApi,
 } from '../src/preload/preload';
 import type { ExportCapabilities } from '../src/main/export';
+import { decodeText } from '../src/main/decodeText';
 import type { OrientationPref } from '../src/renderer/layout';
 import { askConfirmClose, saveFile, showTakenOver } from './dialogs';
 import { soleInstance, type Instance } from './instance';
@@ -93,6 +94,12 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
       }),
   );
   instance.onLost(() => showTakenOver());
+  /** The name a record was shared under; its path may carry a " (2)". */
+  const nameOf = (path: string): Promise<string> =>
+    storage.files.read(path).then(
+      (f) => f.name,
+      () => basename(path),
+    );
   const describe = (err: unknown) =>
     err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   // A share or download has already happened when the record is written; if that write
@@ -132,12 +139,16 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
   let importing: Promise<unknown> = Promise.resolve();
   const importFile = (file: File): Promise<FileData> => {
     const run = async () => {
-      const { text, eol } = splitEol(await file.text());
+      // Same decoding as the desktop: a byte-order mark is kept, and a file that is not
+      // UTF-8 is read as Windows-1252 and flagged (src/main/decodeText.ts).
+      const decoded = decodeText(new Uint8Array(await file.arrayBuffer()));
+      const { text, eol } = splitEol(decoded.text);
       const path = await storage.files.uniquePath(
         'Imported',
         file.name || 'Untitled.md',
       );
-      return record(path, basename(path), text, eol);
+      const data = await record(path, basename(path), text, eol);
+      return decoded.encoding ? { ...data, encoding: decoded.encoding } : data;
     };
     const next = importing.then(run, run);
     importing = next.catch(() => undefined);
@@ -193,7 +204,7 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
       },
       // Save = share or download again under the same name; the record keeps the path.
       save: async (path, text, eol) => {
-        const name = basename(path);
+        const name = await nameOf(path);
         const choice = await saveFile({
           suggestedName: name,
           text: joinEol(text, eol),
@@ -208,19 +219,22 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
       // The renderer passes the current path as the suggestion when there is one.
       saveAs: async (suggestedName, text, eol) => {
         const own = suggestedName.includes('/') ? suggestedName : null;
+        const ownName = own ? await nameOf(own) : null;
         const choice = await saveFile({
-          suggestedName: own ? basename(own) : suggestedName,
+          suggestedName: ownName ?? suggestedName,
           text: joinEol(text, eol),
           mime: 'text/markdown',
           title: 'Save as',
         });
         if (!choice) return null;
         return recordOrExplain(choice.via, async () => {
+          // The record keeps the name the user typed even when its path needs a
+          // " (2)" to stay unique, so the tab and later Saves use that name (A-flagB).
           const path =
-            own && basename(own) === choice.name
+            own && ownName === choice.name
               ? own
               : await storage.files.uniquePath('Shared', choice.name);
-          return record(path, basename(path), text, eol ?? '\n');
+          return record(path, choice.name, text, eol ?? '\n');
         });
       },
       pathForFile: (file) => {
