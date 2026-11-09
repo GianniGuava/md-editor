@@ -3,7 +3,10 @@
  * `webApp` plugin in vite.web.config.mts, which fills in the build id and asset list.
  *  - Hashed assets are precached and served cache-first: their names change per build.
  *  - Navigations go network-first so a new deploy shows up on the next open, with the
- *    cached page as the offline fallback (the app shell).
+ *    cached page as the offline fallback (the app shell). Only the app's own page ("/")
+ *    is stored as that fallback, and only when it is HTML (scan finding B-F7).
+ *  - Install is all or nothing (cache.addAll): if any file fails, the new worker does not
+ *    install and the previous complete copy stays (finding B-F8).
  *  - A new build takes over at once (skipWaiting + clients.claim); old caches are dropped.
  */
 // The project compiles with the DOM library; these are the worker-side shapes it uses.
@@ -37,11 +40,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) =>
-        Promise.all(
-          PRECACHE.map((url) => cache.add(url).catch(() => undefined)),
-        ),
-      )
+      .then((cache) => cache.addAll(PRECACHE))
       .then(() => self.skipWaiting()),
   );
 });
@@ -64,18 +63,20 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
+    const isShell = url.pathname === '/' || url.pathname === '/index.html';
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) {
+          const html = (res.headers.get('content-type') ?? '').includes(
+            'text/html',
+          );
+          if (isShell && res.ok && html && !res.redirected) {
             const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put('/index.html', copy));
+            caches.open(CACHE).then((c) => c.put('/', copy));
           }
           return res;
         })
-        .catch(() =>
-          caches.match('/index.html').then((hit) => hit ?? Response.error()),
-        ),
+        .catch(() => caches.match('/').then((hit) => hit ?? Response.error())),
     );
     return;
   }

@@ -6,6 +6,26 @@ body {
   overflow: hidden;
 }
 
+/* Each part keeps its own row. Without this, hiding the empty banner area moves the
+   workspace into the banners' auto row and the status bar into the 1fr row, so a short
+   document leaves a strip of editor above a tall empty status bar (scan finding B-F1,
+   2026-11-08; shared by the desktop and browser builds). */
+#chrome {
+  grid-row: 1;
+}
+
+#banners {
+  grid-row: 2;
+}
+
+#workspace {
+  grid-row: 3;
+}
+
+#status {
+  grid-row: 4;
+}
+
 /* ---- Header: tab bar above toolbar ---- */
 #chrome {
   display: flex;

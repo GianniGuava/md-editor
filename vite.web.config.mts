@@ -66,6 +66,10 @@ const MANIFEST = {
 function webApp(): Plugin {
   return {
     name: 'md-web-app',
+    // Last, so the bundle it lists is final: Vite drops CSS-only chunks in its own
+    // generateBundle, and listing one made the precache name a file that does not exist
+    // (scan finding B-F8).
+    enforce: 'post',
     transformIndexHtml: (html) =>
       html.replace(
         '</head>',
@@ -77,22 +81,25 @@ function webApp(): Plugin {
         fileName: 'manifest.webmanifest',
         source: JSON.stringify(MANIFEST, null, 2),
       });
-      const precache = [
-        '/',
-        '/index.html',
-        '/manifest.webmanifest',
-        '/favicon.svg',
-        '/apple-touch-icon.png',
-        '/logo-192.png',
-        '/logo-512.png',
-        ...Object.keys(bundle)
-          .filter((f) => f.startsWith('assets/'))
-          .map((f) => `/${f}`),
-      ];
-      const buildId = createHash('sha256')
-        .update(precache.join('\n'))
-        .digest('hex')
-        .slice(0, 12);
+      // The page itself is cached as "/" only: a direct request for /index.html may be
+      // answered with a redirect, and a redirected response cannot serve a navigation
+      // (finding B-F6). Everything else in the bundle (assets, icons, manifest) is listed.
+      const files = Object.keys(bundle).filter(
+        (f) => f !== 'index.html' && !f.endsWith('.map'),
+      );
+      // The manifest emitted above is not always visible in `bundle` yet; list it anyway.
+      if (!files.includes('manifest.webmanifest'))
+        files.push('manifest.webmanifest');
+      const precache = ['/', ...files.map((f) => `/${f}`)];
+      // The id covers every file's content, so a deploy that changes only an icon or the
+      // manifest still installs a new worker (check flag B).
+      const hash = createHash('sha256');
+      for (const f of Object.keys(bundle).sort()) {
+        const out = bundle[f];
+        hash.update(f).update(out.type === 'chunk' ? out.code : out.source);
+      }
+      hash.update(JSON.stringify(MANIFEST));
+      const buildId = hash.digest('hex').slice(0, 12);
       const out = await build({
         configFile: false,
         logLevel: 'warn',

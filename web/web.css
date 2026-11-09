@@ -7,6 +7,14 @@ body {
   height: var(--vv-height, 100%);
 }
 
+/* viewport-fit=cover (index.html) lets the page reach the screen edges; keep the tabs,
+   toolbar and status line clear of the notch and the home indicator (scan finding
+   B-F10; WebKit, "Designing Websites for iPhone X", 2017). */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
 /* The body grid has no column template; without a floor of 0 the single column grows to the
    toolbar's unwrapped width and the whole page scrolls sideways on a phone. */
 body {
