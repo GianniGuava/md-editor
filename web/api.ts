@@ -7,10 +7,11 @@ import type {
 } from '../src/preload/preload';
 import type { ExportCapabilities } from '../src/main/export';
 import type { OrientationPref } from '../src/renderer/layout';
-import { askConfirmClose, saveFile } from './dialogs';
+import { askConfirmClose, saveFile, showTakenOver } from './dialogs';
+import { soleInstance, type Instance } from './instance';
 import { pickFiles } from './filePicker';
 import { printStandalone } from './print';
-import { createStorage } from './storage';
+import { createStorage, type Storage } from './storage';
 import { basename, joinEol, splitEol } from './text';
 import type { MenuState } from './commands';
 
@@ -48,8 +49,17 @@ export interface BrowserApi {
   state: MenuState;
 }
 
-export function createBrowserApi(dbName?: string): BrowserApi {
-  const storage = createStorage(dbName);
+export interface BrowserApiOptions {
+  storage?: Storage;
+  /** Which open copy of the site may write (instance.ts, D-35). */
+  instance?: Instance;
+  /** IndexedDB name prefix when no storage is given (tests). */
+  dbName?: string;
+}
+
+export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
+  const storage = opts.storage ?? createStorage(opts.dbName);
+  const instance = opts.instance ?? soleInstance();
   const commands = new Signal<AppCommandMessage>();
   const systemTheme = new Signal<{ dark: boolean }>();
   const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -71,6 +81,21 @@ export function createBrowserApi(dbName?: string): BrowserApi {
   });
   window.addEventListener('pagehide', flush);
 
+  // Another copy of the site asked to take over: write this copy's session (the next
+  // session.save after the flush), then stop saving and say so (D-35).
+  let afterSave: (() => void) | null = null;
+  instance.setHandover(
+    () =>
+      new Promise<void>((resolve) => {
+        afterSave = resolve;
+        flush();
+        window.setTimeout(resolve, 1000);
+      }),
+  );
+  instance.onLost(() => showTakenOver());
+  const notMine = () =>
+    new Error('MD is open in another tab; this tab no longer saves.');
+
   // Records written since the last session report that listed them. A report captured
   // before an import or a share can reach session.save after it; its tab list does not
   // name the new record yet, so pruning must spare it (scan finding A-F1).
@@ -81,6 +106,7 @@ export function createBrowserApi(dbName?: string): BrowserApi {
     text: string,
     eol: '\n' | '\r\n',
   ): Promise<FileData> => {
+    if (!(await instance.mayWrite())) throw notMine();
     fresh.add(path);
     return storage.files.write(path, name, text, eol);
   };
@@ -181,7 +207,7 @@ export function createBrowserApi(dbName?: string): BrowserApi {
     theme: {
       set: async (pref) => {
         state.theme = pref;
-        await storage.session.setTheme(pref);
+        if (await instance.mayWrite()) await storage.session.setTheme(pref);
         return { dark: darkQuery.matches };
       },
     },
@@ -196,6 +222,7 @@ export function createBrowserApi(dbName?: string): BrowserApi {
         return loaded;
       },
       save: async (report) => {
+        if (!(await instance.mayWrite())) return;
         state.theme = report.theme;
         if (report.orientation) state.orientation = report.orientation;
         await storage.session.save(report);
@@ -211,10 +238,17 @@ export function createBrowserApi(dbName?: string): BrowserApi {
         await storage.session.pruneDrafts(
           report.tabs.flatMap((t) => (t.draft ? [t.draft] : [])),
         );
+        afterSave?.();
+        afterSave = null;
       },
-      writeDraft: (id, text) => storage.session.writeDraft(id, text),
+      writeDraft: async (id, text) => {
+        if (await instance.mayWrite())
+          await storage.session.writeDraft(id, text);
+      },
       readDraft: (id) => storage.session.readDraft(id),
-      deleteDraft: (id) => storage.session.deleteDraft(id),
+      deleteDraft: async (id) => {
+        if (await instance.mayWrite()) await storage.session.deleteDraft(id);
+      },
     },
 
     windows: {

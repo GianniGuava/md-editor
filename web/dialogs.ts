@@ -6,6 +6,8 @@ import type { CloseDecision } from '../src/preload/preload';
  *    means handing the text to another app (Web Share with files) or downloading it
  *    (D-30). The share call runs inside the button's click so iOS treats it as a gesture.
  *  - askConfirmClose: the one confirmation this app has (D-21): Save / Don't save / Cancel.
+ *  - showTakenOver: this copy of the site stopped saving because a newer one took over
+ *    (D-35). It cannot be dismissed: typing here would be lost.
  */
 
 const esc = (s: string) =>
@@ -175,4 +177,31 @@ export function askConfirmClose(name: string): Promise<CloseDecision> {
     dlg.showModal();
     dlg.querySelector<HTMLButtonElement>('[data-act=save]')!.focus();
   });
+}
+
+export function showTakenOver(): void {
+  if (document.getElementById('taken-over')) return;
+  const dlg = document.createElement('dialog');
+  dlg.className = 'web-dialog';
+  dlg.id = 'taken-over';
+  dlg.setAttribute('aria-labelledby', 'taken-title');
+  dlg.setAttribute('aria-describedby', 'taken-text');
+  dlg.innerHTML = `
+    <div class="web-form">
+      <h2 id="taken-title">MD is open in another tab</h2>
+      <p id="taken-text">This tab has stopped saving, so the two cannot overwrite each other's
+        work. Your documents are in the other tab. To work here instead, use MD here: this tab
+        reloads with everything the other tab saved.</p>
+      <div class="web-actions">
+        <button type="button" class="tool primary" data-act="here">Use MD here</button>
+      </div>
+    </div>`;
+  document.body.appendChild(dlg);
+  dlg.addEventListener('cancel', (e) => e.preventDefault());
+  dlg
+    .querySelector('[data-act=here]')!
+    .addEventListener('click', () => window.location.reload());
+  // Above any dialog already open (Save, Menu): the newest modal is on top.
+  dlg.showModal();
+  dlg.querySelector<HTMLButtonElement>('[data-act=here]')!.focus();
 }

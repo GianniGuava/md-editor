@@ -99,3 +99,43 @@ test('reopening a closed tab brings the document back as it was', async ({
   await expect(reopened).not.toContainText('(modified)');
   await expect(page.locator('#status-main')).toContainText('Imported/kept.md');
 });
+
+test('the newest tab takes over and the older one stops saving', async ({
+  page,
+  context,
+}) => {
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('# Typed in the first tab');
+  // No pause: the first tab must hand over text it has not written yet.
+  const second = await context.newPage();
+  await second.goto('/');
+  await expect(second.locator('#preview-pane h1')).toHaveText(
+    'Typed in the first tab',
+  );
+  const notice = page.getByRole('dialog', { name: /open in another tab/i });
+  await expect(notice).toBeVisible();
+
+  // Work in the second tab survives the first tab's later attempts to save.
+  await second.locator('.cm-content').click();
+  await second.keyboard.press('End');
+  await second.keyboard.type(' and the second');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await settle(second);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await second.reload();
+  await expect(second.locator('#preview-pane h1')).toHaveText(
+    'Typed in the first tab and the second',
+  );
+
+  // "Use MD here" moves it back, with the second tab's text.
+  await expect(
+    second.getByRole('dialog', { name: /open in another tab/i }),
+  ).toBeHidden();
+  await notice.getByRole('button', { name: 'Use MD here' }).click();
+  await expect(page.locator('#preview-pane h1')).toHaveText(
+    'Typed in the first tab and the second',
+  );
+  await expect(
+    second.getByRole('dialog', { name: /open in another tab/i }),
+  ).toBeVisible();
+});

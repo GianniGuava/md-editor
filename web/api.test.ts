@@ -45,7 +45,10 @@ const tab = (path: string | null, draft: string | null = null) => ({
 
 const fresh = () => {
   const db = `api-${Math.random().toString(36).slice(2)}`;
-  return { api: createBrowserApi(db).api, storage: createStorage(db) };
+  return {
+    api: createBrowserApi({ dbName: db }).api,
+    storage: createStorage(db),
+  };
 };
 
 const importNamed = async (

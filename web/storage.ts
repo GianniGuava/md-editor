@@ -52,6 +52,11 @@ export interface Storage {
     /** Remove every draft whose id is not in `keep` (the desktop prunes at start-up, D-23). */
     pruneDrafts(keep: Iterable<string>): Promise<void>;
   };
+  /** Which open copy of the site may write (instance.ts, D-35). */
+  owner: {
+    get(): Promise<string | undefined>;
+    set(id: string): Promise<void>;
+  };
 }
 
 const WINDOW_ID = 'web';
@@ -73,6 +78,10 @@ export function createStorage(dbName = 'md'): Storage {
   });
 
   return {
+    owner: {
+      get: () => get<string>('owner', state),
+      set: (id) => set('owner', id, state),
+    },
     files: {
       async read(path) {
         const f = await get<StoredFile>(path, files);
