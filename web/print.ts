@@ -4,6 +4,7 @@ import tokensCss from '../src/renderer/styles/tokens.css?raw';
  * PDF in the browser (PLAN.md §35, D-31): the export HTML the renderer already builds
  * is placed in a print-only root on the page and window.print() is called; on iOS the
  * print sheet offers "Save to Files" as PDF. Electron's printToPDF has no web equivalent.
+ * The root is removed at the user's next tap or key press.
  */
 
 /** The light token block, with enough specificity to beat the dark and high-contrast themes. */
@@ -54,4 +55,18 @@ export function printStandalone(html: string, pageSize: 'A4' | 'Letter'): void {
   style.textContent = buildPrintCss(css, pageSize);
   root.innerHTML = body; // already sanitised by DOMPurify in the renderer
   window.print();
+  // Left in place, the print copy would also be what a later browser Print produces
+  // (scan finding B-F2). It goes at the next tap or key press in the page, which cannot
+  // happen while the print sheet is up; "afterprint" is not used because iOS may fire it
+  // before its sheet has finished with the page (INFERRED; R-23 device check).
+  const printRoot = root;
+  const printStyle = style;
+  const cleanup = () => {
+    printRoot.remove();
+    printStyle.remove();
+    window.removeEventListener('pointerdown', cleanup, true);
+    window.removeEventListener('keydown', cleanup, true);
+  };
+  window.addEventListener('pointerdown', cleanup, true);
+  window.addEventListener('keydown', cleanup, true);
 }

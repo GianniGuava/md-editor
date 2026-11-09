@@ -7,7 +7,25 @@ import type { OrientationPref } from '../src/renderer/layout';
  * its shortcut (D-16); a hardware keyboard reaches the same commands through the
  * accelerators below. Ctrl+T, Ctrl+W and Ctrl+Tab also belong to the browser and may
  * act on the browser tab instead; that is outside the page's control.
+ * Platform (notebook shortcut-conventions; Apple, "Mac keyboard shortcuts"): on Apple
+ * devices the modifier is Command and Control is left to text editing (Control+E, +H,
+ * +T are editing keys there); elsewhere it is Control. Next/previous tab is Control+Tab
+ * on both, as in Safari. Find next/previous is Command+G on Apple devices, F3 elsewhere.
  */
+
+/** iPhone, iPad (which reports itself as a Mac) and Mac. */
+export const isApple = (): boolean =>
+  /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+
+/** Show a shortcut as the platform writes it: "⇧⌘S" on Apple devices, "Ctrl+Shift+S" elsewhere. */
+export function formatKeys(keys: string, apple: boolean): string {
+  if (!apple) return keys;
+  const parts = keys.split(/\+(?=.)/);
+  const last = parts.pop()!;
+  const mods = new Set(parts);
+  const control = mods.has('Ctrl') && last === 'Tab';
+  return `${control ? '⌃' : ''}${mods.has('Shift') ? '⇧' : ''}${mods.has('Ctrl') && !control ? '⌘' : ''}${last}`;
+}
 
 export interface MenuState {
   theme: ThemePref;
@@ -20,6 +38,8 @@ interface Item {
   label: string;
   name: AppCommandMessage['name'];
   keys?: string;
+  /** Where the Apple shortcut is a different key, not just a different modifier. */
+  appleKeys?: string;
 }
 
 const GROUPS: { label: string; items: Item[] }[] = [
@@ -38,8 +58,18 @@ const GROUPS: { label: string; items: Item[] }[] = [
     label: 'Edit',
     items: [
       { label: 'Find…', name: 'edit:find', keys: 'Ctrl+F' },
-      { label: 'Find next', name: 'edit:findNext', keys: 'F3' },
-      { label: 'Find previous', name: 'edit:findPrev', keys: 'Shift+F3' },
+      {
+        label: 'Find next',
+        name: 'edit:findNext',
+        keys: 'F3',
+        appleKeys: 'Ctrl+G',
+      },
+      {
+        label: 'Find previous',
+        name: 'edit:findPrev',
+        keys: 'Shift+F3',
+        appleKeys: 'Ctrl+Shift+G',
+      },
       { label: 'Replace…', name: 'edit:replace', keys: 'Ctrl+H' },
     ],
   },
@@ -83,15 +113,22 @@ const THEMES: [string, ThemePref][] = [
 ];
 
 /** Map a key event to the command its Electron accelerator would send; null if none. */
-export function acceleratorFor(e: KeyboardEvent): AppCommandMessage | null {
+export function acceleratorFor(
+  e: KeyboardEvent,
+  apple: boolean = isApple(),
+): AppCommandMessage | null {
   if (e.altKey) return null;
-  const mod = e.ctrlKey || e.metaKey;
+  if (e.key === 'Tab' && e.ctrlKey && !e.metaKey)
+    return { name: e.shiftKey ? 'tab:prev' : 'tab:next' };
+  const mod = apple ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
   if (!mod) {
-    if (e.key === 'F3')
+    if (e.key === 'F3' && !e.ctrlKey && !e.metaKey)
       return { name: e.shiftKey ? 'edit:findPrev' : 'edit:findNext' };
     return null;
   }
   const k = e.key.toLowerCase();
+  if (apple && k === 'g')
+    return { name: e.shiftKey ? 'edit:findPrev' : 'edit:findNext' };
   if (k === '=' || k === '+') return { name: 'zoom:in' };
   if (k === '-' || k === '_') return { name: 'zoom:out' };
   if (e.shiftKey) {
@@ -133,6 +170,7 @@ export function installCommands(
   dispatch: Dispatch,
   state: MenuState,
 ): void {
+  const apple = isApple();
   const dlg = document.createElement('dialog');
   dlg.className = 'web-dialog web-menu';
   dlg.id = 'menu-dialog';
@@ -188,7 +226,8 @@ export function installCommands(
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'tool web-menu-item';
-        b.innerHTML = `<span>${item.label}</span>${item.keys ? `<kbd class="keys">${item.keys}</kbd>` : ''}`;
+        const keys = apple ? (item.appleKeys ?? item.keys) : item.keys;
+        b.innerHTML = `<span>${item.label}</span>${keys ? `<kbd class="keys">${formatKeys(keys, apple)}</kbd>` : ''}`;
         b.addEventListener('click', () => {
           dlg.close();
           dispatch({ name: item.name });
@@ -224,25 +263,39 @@ export function installCommands(
   group.setAttribute('aria-label', 'Menu');
   group.appendChild(menuBtn);
 
-  // The renderer fills the toolbar during boot; add the menu once it has.
-  if (toolbar.childElementCount > 0) toolbar.appendChild(group);
+  // The renderer fills the toolbar during boot; add the menu once it has, and on Apple
+  // devices show the toolbar's shortcuts with Command.
+  const finishToolbar = () => {
+    toolbar.appendChild(group);
+    if (!apple) return;
+    for (const b of toolbar.querySelectorAll<HTMLElement>('[data-keys]')) {
+      const keys = b.dataset.keys;
+      if (keys && b.title.endsWith(`(${keys})`))
+        b.title = `${b.title.slice(0, -keys.length - 2)}(${formatKeys(keys, true)})`;
+    }
+  };
+  if (toolbar.childElementCount > 0) finishToolbar();
   else {
     const obs = new MutationObserver(() => {
       if (toolbar.childElementCount === 0) return;
       obs.disconnect();
-      toolbar.appendChild(group);
+      finishToolbar();
     });
     obs.observe(toolbar, { childList: true });
   }
 
   // Hardware keyboards: the Electron accelerators. Captured before the editor sees them.
+  // While a dialog is open the key does nothing (no second Save dialog, no tab behind a
+  // modal), and a held key fires once, except zoom (scan finding B-F3).
   window.addEventListener(
     'keydown',
     (e) => {
-      const msg = acceleratorFor(e);
+      const msg = acceleratorFor(e, apple);
       if (!msg) return;
       e.preventDefault();
       e.stopPropagation();
+      if (document.querySelector('dialog[open]')) return;
+      if (e.repeat && msg.name !== 'zoom:in' && msg.name !== 'zoom:out') return;
       dispatch(msg);
     },
     true,

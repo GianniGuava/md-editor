@@ -338,3 +338,41 @@ test('save as a name another tab already uses keeps the name the user typed', as
   await page.keyboard.type(' again');
   expect((await saveDownload(page)).name).toBe('b.md');
 });
+
+test('a shortcut pressed inside a dialog does not open another one behind it', async ({
+  page,
+}) => {
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Words');
+  await page.keyboard.press('Control+Shift+S');
+  const field = page.locator('dialog[open]').getByLabel('File name');
+  await expect(field).toBeFocused();
+  await page.keyboard.press('Control+S');
+  await page.keyboard.press('Control+T');
+  await expect(page.locator('dialog[open]')).toHaveCount(1);
+  await expect(page.getByRole('tab')).toHaveCount(1);
+});
+
+test('after a PDF export, printing the page prints the page, not the old export', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.print = () => undefined;
+  });
+  await page.reload();
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('# Exported version');
+  await page.locator('#menu-button').click();
+  await page
+    .locator('#menu-dialog')
+    .getByRole('button', { name: 'Export…' })
+    .click();
+  await page.locator('#export-dialog input[value=pdf]').check();
+  await page.locator('#export-go').click();
+  await expect(page.locator('#print-root')).toHaveCount(1);
+  await page.locator('.cm-content').click();
+  await page.keyboard.type(' then edited');
+  await expect(page.locator('#print-root')).toHaveCount(0);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#workspace')).toBeVisible();
+});

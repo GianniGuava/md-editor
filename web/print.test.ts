@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildPrintCss, lightTokensForPrint, splitStandalone } from './print';
+import {
+  buildPrintCss,
+  lightTokensForPrint,
+  printStandalone,
+  splitStandalone,
+} from './print';
 import { buildStandaloneHtml } from '../src/renderer/exportHtml';
 import { acceleratorFor } from './commands';
 import { cleanName } from './dialogs';
@@ -42,7 +47,8 @@ describe('accelerators', () => {
     expect(
       acceleratorFor(key({ key: 'S', ctrlKey: true, shiftKey: true })),
     ).toEqual({ name: 'file:saveAs' });
-    expect(acceleratorFor(key({ key: 's', metaKey: true }))).toEqual({
+    // Command+S saves on an Apple device (B-F4: Command only there, Control elsewhere).
+    expect(acceleratorFor(key({ key: 's', metaKey: true }), true)).toEqual({
       name: 'file:save',
     });
     expect(acceleratorFor(key({ key: 'F3' }))).toEqual({
@@ -85,5 +91,22 @@ describe('cleanName', () => {
     expect(cleanName('..', 'Untitled-1.md')).toBe('Untitled-1.md');
     expect(cleanName('Notes.MARKDOWN', 'x.md')).toBe('Notes.MARKDOWN');
     expect(cleanName('page.htm', 'doc.html')).toBe('page.htm');
+  });
+});
+
+describe('printStandalone', () => {
+  it('removes the print copy at the next tap or key press after printing', () => {
+    const printed: string[] = [];
+    window.print = () =>
+      void printed.push(
+        (document.getElementById('print-root')?.textContent ?? '').trim(),
+      );
+    printStandalone(buildStandaloneHtml('T', '<h1>Exported</h1>', ''), 'A4');
+    expect(printed).toEqual(['Exported']);
+    // Still there while the print sheet may be open.
+    expect(document.getElementById('print-root')).not.toBeNull();
+    window.dispatchEvent(new Event('pointerdown'));
+    expect(document.getElementById('print-root')).toBeNull();
+    expect(document.getElementById('print-style')).toBeNull();
   });
 });
