@@ -139,3 +139,109 @@ test('the newest tab takes over and the older one stops saving', async ({
     second.getByRole('dialog', { name: /open in another tab/i }),
   ).toBeVisible();
 });
+
+/** Make IndexedDB writes fail while `window.__failPut(value, key)` returns true. */
+const failingPuts = (page: Page) =>
+  page.addInitScript(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
+      const w = window as unknown as {
+        __failPut?: (v: unknown, k?: IDBValidKey) => boolean;
+      };
+      if (w.__failPut?.(value, key))
+        throw new DOMException(
+          'The quota has been exceeded.',
+          'QuotaExceededError',
+        );
+      return put.call(this, value, key);
+    };
+  });
+
+test('an import that fails part-way opens the files that worked and says which failed', async ({
+  page,
+}) => {
+  await failingPuts(page);
+  await page.reload();
+  await page.waitForSelector('[role=tab]');
+  await page.evaluate(() => {
+    (window as unknown as { __failPut: (v: unknown) => boolean }).__failPut = (
+      v,
+    ) => (v as { name?: string })?.name === 'c.md';
+  });
+  await importFiles(page, { 'a.md': '# A', 'b.md': '# B', 'c.md': '# C' });
+  await expect(page.getByRole('tab', { name: /a\.md/ })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /b\.md/ })).toBeVisible();
+  await expect(page.locator('#banners')).toContainText('c.md');
+  await expect(page.locator('#banners')).toContainText('QuotaExceededError');
+});
+
+test('when drafts cannot be backed up the user is told, and the notice clears once they can', async ({
+  page,
+}) => {
+  await failingPuts(page);
+  await page.reload();
+  await page.waitForSelector('[role=tab]');
+  await page.evaluate(() => {
+    (
+      window as unknown as { __failPut: (v: unknown, k?: unknown) => boolean }
+    ).__failPut = (_v, k) => typeof k === 'string' && k.startsWith('draft:');
+  });
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Unsaved words');
+  await expect(page.locator('#banners')).toContainText(
+    'could not be backed up',
+  );
+  await page.evaluate(() => {
+    (window as unknown as { __failPut?: unknown }).__failPut = undefined;
+  });
+  await page.keyboard.type(' and more');
+  await expect(page.locator('#banners')).not.toContainText(
+    'could not be backed up',
+  );
+});
+
+test('a phone whose storage is blocked still gets an editor and an explanation', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    indexedDB.open = () => {
+      throw new DOMException('Storage is blocked.', 'SecurityError');
+    };
+  });
+  await page.reload();
+  await expect(page.locator('#banners')).toContainText('could not be loaded');
+  await expect(page.getByRole('tab')).toHaveCount(1);
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('# Still works');
+  await expect(page.locator('#preview-pane h1')).toHaveText('Still works');
+});
+
+test('a save whose record cannot be written says so instead of failing silently', async ({
+  page,
+}) => {
+  await failingPuts(page);
+  await page.reload();
+  await page.waitForSelector('[role=tab]');
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('Text to keep');
+  await page.evaluate(() => {
+    (
+      window as unknown as { __failPut: (v: unknown, k?: unknown) => boolean }
+    ).__failPut = (_v, k) => typeof k === 'string' && k.startsWith('Shared/');
+  });
+  await page.locator('#menu-button').click();
+  await page
+    .locator('#menu-dialog')
+    .getByRole('button', { name: 'Save as…' })
+    .click();
+  const save = page.locator('dialog.web-dialog').last();
+  await save.getByLabel('File name').fill('kept');
+  const download = page.waitForEvent('download');
+  await save.getByRole('button', { name: 'Download' }).click();
+  await download;
+  await expect(page.locator('#banners')).toContainText('could not record');
+  await expect(page.getByRole('tab').first()).toContainText('(modified)');
+});

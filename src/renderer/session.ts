@@ -47,6 +47,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
   let timer: number | undefined;
   let saving: Promise<void> = Promise.resolve();
   let restored = false;
+  let failing = false;
   const draftHashes = new Map<string, string>(); // draftId → last written text
 
   const capture = (): WindowReport => {
@@ -109,8 +110,19 @@ export function installSession(deps: SessionDeps): SessionHandle {
       });
     try {
       await saving;
+      if (failing) deps.banners.dismiss('session-failed');
+      failing = false;
     } catch (err) {
       console.error('[md] session flush failed', err);
+      // Say so once, and keep saying it until a write works again (scan finding A-F4).
+      if (!failing)
+        deps.banners.show({
+          key: 'session-failed',
+          tone: 'danger',
+          message: `Unsaved changes could not be backed up (${err instanceof Error ? err.message : String(err)}). Save your work to keep it; this notice goes away once backing up works again.`,
+          actions: [],
+        });
+      failing = true;
     }
   };
 

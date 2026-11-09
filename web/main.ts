@@ -1,6 +1,6 @@
 import { createBrowserApi } from './api';
 import { installCommands } from './commands';
-import { claimInstance } from './instance';
+import { claimInstance, soleInstance } from './instance';
 import { createStorage } from './storage';
 import { installViewport } from './viewport';
 
@@ -12,7 +12,8 @@ import { installViewport } from './viewport';
  */
 const storage = createStorage();
 // The newest open copy of the site takes over before anything is read (D-35).
-const instance = await claimInstance(storage.owner);
+// If storage is unusable there is nothing to coordinate; the renderer reports the failure.
+const instance = await claimInstance(storage.owner).catch(() => soleInstance());
 const { api, dispatch, state } = createBrowserApi({ storage, instance });
 window.md = api;
 installViewport();

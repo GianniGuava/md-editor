@@ -93,6 +93,22 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
       }),
   );
   instance.onLost(() => showTakenOver());
+  const describe = (err: unknown) =>
+    err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  // A share or download has already happened when the record is written; if that write
+  // fails, say what did happen rather than reporting a plain failure.
+  const recordOrExplain = async (
+    via: 'share' | 'download',
+    write: () => Promise<FileData>,
+  ): Promise<FileData> => {
+    try {
+      return await write();
+    } catch (err) {
+      throw new Error(
+        `it was ${via === 'share' ? 'shared' : 'downloaded'}, but this device could not record it (${describe(err)}), so the tab still shows unsaved changes.`,
+      );
+    }
+  };
   const notMine = () =>
     new Error('MD is open in another tab; this tab no longer saves.');
 
@@ -148,9 +164,23 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
     onCommand: (cb) => commands.on(cb),
 
     files: {
+      // Each file is imported on its own: one failure does not discard the others. The
+      // error carries the files that did import so the renderer can still open them.
       openDialog: async () => {
         const out: FileData[] = [];
-        for (const f of await pickFiles()) out.push(await importFile(f));
+        const failed: string[] = [];
+        for (const f of await pickFiles()) {
+          try {
+            out.push(await importFile(f));
+          } catch (err) {
+            failed.push(`"${f.name}" (${describe(err)})`);
+          }
+        }
+        if (failed.length > 0)
+          throw Object.assign(
+            new Error(`Could not import ${failed.join(', ')}.`),
+            { opened: out },
+          );
         return out;
       },
       read: async (path) => {
@@ -170,8 +200,10 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
           mime: 'text/markdown',
           fixedName: true,
         });
-        if (!choice) throw new Error('Save cancelled');
-        return record(path, name, text, eol ?? '\n');
+        if (!choice) throw new DOMException('Save cancelled', 'AbortError');
+        return recordOrExplain(choice.via, () =>
+          record(path, name, text, eol ?? '\n'),
+        );
       },
       // The renderer passes the current path as the suggestion when there is one.
       saveAs: async (suggestedName, text, eol) => {
@@ -183,11 +215,13 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
           title: 'Save as',
         });
         if (!choice) return null;
-        const path =
-          own && basename(own) === choice.name
-            ? own
-            : await storage.files.uniquePath('Shared', choice.name);
-        return record(path, basename(path), text, eol ?? '\n');
+        return recordOrExplain(choice.via, async () => {
+          const path =
+            own && basename(own) === choice.name
+              ? own
+              : await storage.files.uniquePath('Shared', choice.name);
+          return record(path, basename(path), text, eol ?? '\n');
+        });
       },
       pathForFile: (file) => {
         const key = `drop:${++dropCounter}`;

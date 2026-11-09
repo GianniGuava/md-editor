@@ -61,9 +61,24 @@ export interface Storage {
 
 const WINDOW_ID = 'web';
 
+/** A store whose every call fails with `err` (storage blocked or unavailable). */
+const brokenStore =
+  (err: unknown): UseStore =>
+  () =>
+    Promise.reject(err);
+
+const openStore = (db: string, name: string): UseStore => {
+  try {
+    return createStore(db, name);
+  } catch (err) {
+    // Safari throws here when storage is blocked; the renderer then reports each failure.
+    return brokenStore(err);
+  }
+};
+
 export function createStorage(dbName = 'md'): Storage {
-  const files: UseStore = createStore(`${dbName}-files`, 'files');
-  const state: UseStore = createStore(`${dbName}-state`, 'state');
+  const files: UseStore = openStore(`${dbName}-files`, 'files');
+  const state: UseStore = openStore(`${dbName}-state`, 'state');
 
   const toFileData = async (
     path: string,

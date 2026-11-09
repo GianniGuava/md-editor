@@ -617,6 +617,7 @@ User request: the editor on an iPhone, editor on top and preview below, mainly t
 
 - Commit 1: the renderer writes no session until `restore()` has finished; records written since the last session report, and the records of recently closed tabs, are kept when pruning; imports run one at a time; drafts no tab refers to are deleted on each session write (findings A-F1, A-F6, A-F7, A-F11).
 - Commit 2: D-35, one writer at a time (`web/instance.ts`; finding A-F2).
+- Commit 3: failures are reported instead of swallowed. An import that fails part-way opens the files that worked and names the ones that did not; a save whose record cannot be written says the file was shared or downloaded but not recorded; storage blocked at launch still gives an editor, with a notice; and (shared with the desktop) a draft backup that fails shows a notice until backing up works again (findings A-F3, A-F4 and the checker's note on `save`).
 
 **Open items.** H-17 (above). R-23: confirm on an iPhone that `navigator.share` with a Markdown file opens the share sheet from the Save dialog, that the print sheet offers Save to Files, and that typing with the on-screen keyboard keeps the preview visible; adjust `viewport.ts` if Safari still scrolls the page. R-24: the orientation override is in the browser menu only; the desktop View menu could gain it.
 
