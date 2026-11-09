@@ -48,8 +48,8 @@ export interface BrowserApi {
   state: MenuState;
 }
 
-export function createBrowserApi(): BrowserApi {
-  const storage = createStorage();
+export function createBrowserApi(dbName?: string): BrowserApi {
+  const storage = createStorage(dbName);
   const commands = new Signal<AppCommandMessage>();
   const systemTheme = new Signal<{ dark: boolean }>();
   const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -71,13 +71,35 @@ export function createBrowserApi(): BrowserApi {
   });
   window.addEventListener('pagehide', flush);
 
-  const importFile = async (file: File): Promise<FileData> => {
-    const { text, eol } = splitEol(await file.text());
-    const path = await storage.files.uniquePath(
-      'Imported',
-      file.name || 'Untitled.md',
-    );
-    return storage.files.write(path, basename(path), text, eol);
+  // Records written since the last session report that listed them. A report captured
+  // before an import or a share can reach session.save after it; its tab list does not
+  // name the new record yet, so pruning must spare it (scan finding A-F1).
+  const fresh = new Set<string>();
+  const record = async (
+    path: string,
+    name: string,
+    text: string,
+    eol: '\n' | '\r\n',
+  ): Promise<FileData> => {
+    fresh.add(path);
+    return storage.files.write(path, name, text, eol);
+  };
+
+  // One import at a time: choosing a free path and writing it are separate steps, so two
+  // same-named files dropped together would otherwise get the same record (A-F6).
+  let importing: Promise<unknown> = Promise.resolve();
+  const importFile = (file: File): Promise<FileData> => {
+    const run = async () => {
+      const { text, eol } = splitEol(await file.text());
+      const path = await storage.files.uniquePath(
+        'Imported',
+        file.name || 'Untitled.md',
+      );
+      return record(path, basename(path), text, eol);
+    };
+    const next = importing.then(run, run);
+    importing = next.catch(() => undefined);
+    return next;
   };
 
   const dispatch = (msg: AppCommandMessage) => {
@@ -123,7 +145,7 @@ export function createBrowserApi(): BrowserApi {
           fixedName: true,
         });
         if (!choice) throw new Error('Save cancelled');
-        return storage.files.write(path, name, text, eol ?? '\n');
+        return record(path, name, text, eol ?? '\n');
       },
       // The renderer passes the current path as the suggestion when there is one.
       saveAs: async (suggestedName, text, eol) => {
@@ -139,7 +161,7 @@ export function createBrowserApi(): BrowserApi {
           own && basename(own) === choice.name
             ? own
             : await storage.files.uniquePath('Shared', choice.name);
-        return storage.files.write(path, basename(path), text, eol ?? '\n');
+        return record(path, basename(path), text, eol ?? '\n');
       },
       pathForFile: (file) => {
         const key = `drop:${++dropCounter}`;
@@ -177,9 +199,17 @@ export function createBrowserApi(): BrowserApi {
         state.theme = report.theme;
         if (report.orientation) state.orientation = report.orientation;
         await storage.session.save(report);
-        // No library: records that no open tab refers to are not kept (D-29).
-        await storage.files.prune(
-          report.tabs.flatMap((t) => (t.path ? [t.path] : [])),
+        // No library: records that no open or recently closed tab refers to are not kept
+        // (D-29). Closed tabs keep theirs so Reopen gets the file back (A-F7); records
+        // newer than this report are spared until a report has seen them (A-F1).
+        const listed = [...report.tabs, ...report.closed].flatMap((t) =>
+          t.path ? [t.path] : [],
+        );
+        for (const p of listed) fresh.delete(p);
+        await storage.files.prune([...listed, ...fresh]);
+        // Drafts no tab refers to are left over from an earlier session (A-F11).
+        await storage.session.pruneDrafts(
+          report.tabs.flatMap((t) => (t.draft ? [t.draft] : [])),
         );
       },
       writeDraft: (id, text) => storage.session.writeDraft(id, text),

@@ -11,7 +11,8 @@ import { hashText, type Eol } from './text';
  * Browser stand-ins for %APPDATA%\MD (PLAN.md §35; D-29, D-30).
  *  - files: the web "disk". A record appears when a document is imported or shared, so
  *    Save, dirty tracking and session restore in the renderer run unchanged. Records
- *    no open tab refers to are pruned when the session is written: there is no library.
+ *    no open or recently closed tab refers to are pruned when the session is written:
+ *    there is no library (api.ts decides what to keep).
  *  - session: this window's entry plus the theme; drafts keyed by draft id (D-23).
  * Everything is IndexedDB on this device (idb-keyval, VENDOR); nothing leaves the phone.
  */
@@ -48,6 +49,8 @@ export interface Storage {
     writeDraft(id: string, text: string): Promise<void>;
     readDraft(id: string): Promise<string | null>;
     deleteDraft(id: string): Promise<void>;
+    /** Remove every draft whose id is not in `keep` (the desktop prunes at start-up, D-23). */
+    pruneDrafts(keep: Iterable<string>): Promise<void>;
   };
 }
 
@@ -121,6 +124,17 @@ export function createStorage(dbName = 'md'): Storage {
       readDraft: async (id) =>
         (await get<string>(`draft:${id}`, state)) ?? null,
       deleteDraft: (id) => del(`draft:${id}`, state),
+      async pruneDrafts(keep) {
+        const wanted = new Set(Array.from(keep, (id) => `draft:${id}`));
+        for (const key of await keys(state)) {
+          if (
+            typeof key === 'string' &&
+            key.startsWith('draft:') &&
+            !wanted.has(key)
+          )
+            await del(key, state);
+        }
+      },
     },
   };
 }

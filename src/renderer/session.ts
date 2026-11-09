@@ -15,6 +15,9 @@ import type { ThemePref } from './theme';
  *    document becomes clean or is closed. The user's own file is written only by Save.
  *  - A document moved to another window keeps its draft id; the source window
  *    "forgets" it so the draft is neither deleted nor rewritten here.
+ *  - Nothing is written until restore() has finished: a report taken from a half-restored
+ *    window would list only some tabs, and the browser build prunes stored documents no
+ *    report lists (PLAN.md §35, scan finding A-F1). If restore fails, nothing is written.
  */
 
 const DEBOUNCE_MS = 500;
@@ -43,6 +46,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
   const { store, editor } = deps;
   let timer: number | undefined;
   let saving: Promise<void> = Promise.resolve();
+  let restored = false;
   const draftHashes = new Map<string, string>(); // draftId → last written text
 
   const capture = (): WindowReport => {
@@ -95,6 +99,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
   const flush = async () => {
     window.clearTimeout(timer);
     timer = undefined;
+    if (!restored) return;
     saving = saving
       .catch(() => undefined)
       .then(async () => {
@@ -118,6 +123,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
     const { theme, window: data } = await window.md.session.load();
     if (!data) {
       await deps.applyUi({ ...deps.getUi(), theme });
+      restored = true;
       return false;
     }
     await deps.applyUi({ ...data, theme });
@@ -215,6 +221,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
       store.closed = data.closed ?? [];
       deps.show();
     }
+    restored = true;
     return restoredAny;
   };
 
