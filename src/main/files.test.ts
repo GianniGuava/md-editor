@@ -68,4 +68,21 @@ describe('writeTextFileAtomic / readTextFile', () => {
     await writeTextFileAtomic(p, data.text, data.eol);
     expect(await fs.readFile(p, 'utf8')).toBe('a\nb\n');
   });
+
+  it('keeps a UTF-8 byte-order mark so Save writes the file back unchanged', async () => {
+    const p = path.join(dir, 'bom.md');
+    await fs.writeFile(p, Buffer.from([0xef, 0xbb, 0xbf, 0x23, 0x20, 0x54]));
+    const data = await readTextFile(p);
+    expect(data.text).toBe('\ufeff# T');
+    expect(data.encoding).toBeUndefined();
+  });
+
+  it('reads a file that is not UTF-8 as Windows-1252 and says so', async () => {
+    const p = path.join(dir, 'old.txt');
+    // "café €" in Windows-1252: é is 0xE9, € is 0x80; neither is valid UTF-8 here.
+    await fs.writeFile(p, Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x20, 0x80]));
+    const data = await readTextFile(p);
+    expect(data.text).toBe('café €');
+    expect(data.encoding).toBe('windows-1252');
+  });
 });

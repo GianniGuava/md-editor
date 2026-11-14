@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { decodeText, type SourceEncoding } from './decodeText';
 
 /**
  * File access for the renderer (PLAN.md step 3). The renderer never sees a
@@ -17,6 +18,8 @@ export interface FileData {
   mtimeMs: number;
   /** Line ending of the file on disk; `text` is always normalised to LF. */
   eol: '\n' | '\r\n';
+  /** Set when the file was not UTF-8 and was read as this encoding (decodeText.ts). */
+  encoding?: SourceEncoding;
 }
 
 export type CloseDecision = 'save' | 'discard' | 'cancel';
@@ -32,7 +35,7 @@ export const hashText = (text: string): string =>
   createHash('sha256').update(text, 'utf8').digest('hex');
 
 export async function readTextFile(p: string): Promise<FileData> {
-  const raw = await fs.readFile(p, 'utf8');
+  const { text: raw, encoding } = decodeText(await fs.readFile(p));
   const st = await fs.stat(p);
   // The editor works in LF; remember the file's convention so Save writes it back
   // unchanged (a CRLF file saved as LF shows as fully modified in git).
@@ -47,6 +50,7 @@ export async function readTextFile(p: string): Promise<FileData> {
     text,
     hash: hashText(text),
     mtimeMs: st.mtimeMs,
+    ...(encoding ? { encoding } : {}),
   };
 }
 

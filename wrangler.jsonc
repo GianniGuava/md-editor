@@ -1,0 +1,17 @@
+// Cloudflare Worker settings for the browser build (PLAN.md §35, README "Web version").
+// Git-connected Workers Builds: build command `npm run check && npm run build:web`,
+// deploy command `npx wrangler deploy`. Pushes to main are production; other branches
+// get preview addresses. `name` must stay "md-web": that is the Worker the domain
+// md.giancarloguevarra.com is attached to.
+{
+  "name": "md-web",
+  "compatibility_date": "2026-10-30",
+
+  // Static files only, no server code: Vite writes the site to web/dist.
+  "assets": {
+    "directory": "./web/dist",
+  },
+
+  // Required (even empty) for branch previews.
+  "previews": {},
+}

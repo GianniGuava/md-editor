@@ -15,6 +15,9 @@ import type { ThemePref } from './theme';
  *    document becomes clean or is closed. The user's own file is written only by Save.
  *  - A document moved to another window keeps its draft id; the source window
  *    "forgets" it so the draft is neither deleted nor rewritten here.
+ *  - Nothing is written until restore() has finished: a report taken from a half-restored
+ *    window would list only some tabs, and the browser build prunes stored documents no
+ *    report lists (PLAN.md §35, scan finding A-F1). If restore fails, nothing is written.
  */
 
 const DEBOUNCE_MS = 500;
@@ -43,6 +46,8 @@ export function installSession(deps: SessionDeps): SessionHandle {
   const { store, editor } = deps;
   let timer: number | undefined;
   let saving: Promise<void> = Promise.resolve();
+  let restored = false;
+  let failing = false;
   const draftHashes = new Map<string, string>(); // draftId → last written text
 
   const capture = (): WindowReport => {
@@ -95,6 +100,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
   const flush = async () => {
     window.clearTimeout(timer);
     timer = undefined;
+    if (!restored) return;
     saving = saving
       .catch(() => undefined)
       .then(async () => {
@@ -104,8 +110,19 @@ export function installSession(deps: SessionDeps): SessionHandle {
       });
     try {
       await saving;
+      if (failing) deps.banners.dismiss('session-failed');
+      failing = false;
     } catch (err) {
       console.error('[md] session flush failed', err);
+      // Say so once, and keep saying it until a write works again (scan finding A-F4).
+      if (!failing)
+        deps.banners.show({
+          key: 'session-failed',
+          tone: 'danger',
+          message: `Unsaved changes could not be backed up (${err instanceof Error ? err.message : String(err)}). Save your work to keep it; this notice goes away once backing up works again.`,
+          actions: [],
+        });
+      failing = true;
     }
   };
 
@@ -118,6 +135,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
     const { theme, window: data } = await window.md.session.load();
     if (!data) {
       await deps.applyUi({ ...deps.getUi(), theme });
+      restored = true;
       return false;
     }
     await deps.applyUi({ ...data, theme });
@@ -128,6 +146,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
       let mtimeMs: number | null = null;
       let missing = false;
       let eol: '\n' | '\r\n' = '\n';
+      let encoding: string | undefined;
       if (tab.path) {
         try {
           const f = await window.md.files.read(tab.path);
@@ -135,6 +154,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
           diskHash = f.hash;
           mtimeMs = f.mtimeMs;
           eol = f.eol;
+          encoding = f.encoding;
         } catch {
           missing = true;
         }
@@ -198,6 +218,13 @@ export function installSession(deps: SessionDeps): SessionHandle {
                 ],
         });
       }
+      if (encoding) {
+        deps.banners.show({
+          key: `encoding:${tab.name}`,
+          message: `"${tab.name}" is not UTF-8 text, so it was read as ${encoding === 'windows-1252' ? 'Windows-1252 (Western European)' : encoding}. Check that accented letters look right; saving writes the file as UTF-8.`,
+          actions: [],
+        });
+      }
       if (missing) {
         deps.banners.show({
           key: `disk:${d.id}:removed`,
@@ -215,6 +242,7 @@ export function installSession(deps: SessionDeps): SessionHandle {
       store.closed = data.closed ?? [];
       deps.show();
     }
+    restored = true;
     return restoredAny;
   };
 

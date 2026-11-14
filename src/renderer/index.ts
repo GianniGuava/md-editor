@@ -3,7 +3,7 @@ import './styles/app.css';
 import { EditorSelection } from '@codemirror/state';
 import { createEditor } from './editor';
 import { createPreview } from './preview';
-import { createLayout, type PaneMode } from './layout';
+import { createLayout, type OrientationPref, type PaneMode } from './layout';
 import { createScrollSync } from './scrollSync';
 import { createZoom } from './zoom';
 import { DocStore, type Doc } from './documents';
@@ -77,7 +77,9 @@ async function boot(): Promise<void> {
 
   const zoom = createZoom();
   const store = new DocStore();
-  const layout = createLayout(document.getElementById('workspace')!);
+  const layout = createLayout(document.getElementById('workspace')!, {
+    orientation: info.defaultOrientation ?? 'columns',
+  });
   const preview = createPreview(layout.previewPane);
   const banners = createBanners(document.getElementById('banners')!);
 
@@ -192,6 +194,14 @@ async function boot(): Promise<void> {
       store.remove(list[0].id, false);
   };
 
+  /** A file that was not UTF-8 was read as `encoding` (src/main/decodeText.ts). */
+  const warnEncoding = (name: string, encoding: string) =>
+    banners.show({
+      key: `encoding:${name}`,
+      message: `"${name}" is not UTF-8 text, so it was read as ${encoding === 'windows-1252' ? 'Windows-1252 (Western European)' : encoding}. Check that accented letters look right; saving writes the file as UTF-8.`,
+      actions: [],
+    });
+
   const openFiles = (files: FileData[]) => {
     if (files.length === 0) return;
     stash();
@@ -218,11 +228,27 @@ async function boot(): Promise<void> {
         },
         false,
       );
+      if (f.encoding) warnEncoding(f.name, f.encoding);
     }
     if (blank) store.remove(blank.id, false);
     if (last) store.activate(last.id);
     show();
   };
+
+  const errorText = (err: unknown) =>
+    err instanceof Error ? err.message : String(err);
+  /** Open dialog; files that did open are shown even when others failed. */
+  const openFromDialog = () =>
+    window.md.files.openDialog().then(openFiles, (err: unknown) => {
+      const opened = (err as { opened?: FileData[] }).opened;
+      if (opened) openFiles(opened);
+      banners.show({
+        key: 'open-failed',
+        tone: 'danger',
+        message: opened ? errorText(err) : `Could not open: ${errorText(err)}`,
+        actions: [],
+      });
+    });
 
   const textOf = (d: Doc) =>
     d.id === store.activeId ? editor.getDoc() : d.state.doc.toString();
@@ -301,12 +327,29 @@ async function boot(): Promise<void> {
   window.md.onRemoveMoved(removeMoved);
 
   // ---- Saving ----
+  // A failed save is reported on the tab's banner; a cancelled one is not (AbortError).
+  const saveFailed = (d: Doc, err: unknown): false => {
+    if ((err as { name?: string })?.name !== 'AbortError')
+      banners.show({
+        key: `save-failed:${d.id}`,
+        tone: 'danger',
+        message: `Could not save "${d.name}": ${errorText(err)}`,
+        actions: [],
+      });
+    return false;
+  };
   const saveAs = async (d: Doc): Promise<boolean> => {
     const text = textOf(d);
     const suggested =
       d.path ?? (d.name.endsWith('.md') ? d.name : `${d.name}.md`);
-    const result = await window.md.files.saveAs(suggested, text, d.eol);
+    let result: FileData | null;
+    try {
+      result = await window.md.files.saveAs(suggested, text, d.eol);
+    } catch (err) {
+      return saveFailed(d, err);
+    }
     if (!result) return false;
+    banners.dismiss(`save-failed:${d.id}`);
     store.update(d.id, {
       path: result.path,
       name: result.name,
@@ -321,7 +364,14 @@ async function boot(): Promise<void> {
   const save = async (d: Doc): Promise<boolean> => {
     if (!d.path) return saveAs(d);
     const text = textOf(d);
-    const { hash, mtimeMs } = await window.md.files.save(d.path, text, d.eol);
+    let saved: Awaited<ReturnType<typeof window.md.files.save>>;
+    try {
+      saved = await window.md.files.save(d.path, text, d.eol);
+    } catch (err) {
+      return saveFailed(d, err);
+    }
+    banners.dismiss(`save-failed:${d.id}`);
+    const { hash, mtimeMs } = saved;
     store.update(d.id, {
       savedText: text,
       diskHash: hash,
@@ -486,13 +536,7 @@ async function boot(): Promise<void> {
     group(
       'File',
       button('New', '+', 'New tab', 'Ctrl+T', () => newTab()),
-      button(
-        'Open',
-        '…',
-        'Open files',
-        'Ctrl+O',
-        () => void window.md.files.openDialog().then(openFiles),
-      ),
+      button('Open', '…', 'Open files', 'Ctrl+O', () => void openFromDialog()),
       button(
         'Save',
         '↓',
@@ -562,6 +606,7 @@ async function boot(): Promise<void> {
       highlight: highlightOn,
       scrollSync: sync.isEnabled(),
       freezeHeaders: freezeOn,
+      orientation: layout.getOrientation(),
     }),
     applyUi: async (ui) => {
       await theme.set(ui.theme);
@@ -571,6 +616,9 @@ async function boot(): Promise<void> {
       setHighlight(ui.highlight);
       setSync(ui.scrollSync);
       setFreeze(ui.freezeHeaders ?? true);
+      layout.setOrientation(
+        ui.orientation ?? info.defaultOrientation ?? 'columns',
+      );
     },
   });
 
@@ -581,7 +629,7 @@ async function boot(): Promise<void> {
         newTab();
         break;
       case 'file:open':
-        void window.md.files.openDialog().then(openFiles);
+        void openFromDialog();
         break;
       case 'file:save':
         if (store.active) void save(store.active);
@@ -625,6 +673,9 @@ async function boot(): Promise<void> {
         break;
       case 'mode:preview':
         setMode('preview');
+        break;
+      case 'layout:set':
+        layout.setOrientation((msg.value as OrientationPref) ?? 'auto');
         break;
       case 'highlight':
         setHighlight(msg.checked ?? true);
@@ -692,9 +743,25 @@ async function boot(): Promise<void> {
     const files = Array.from(e.dataTransfer?.files ?? []);
     if (files.length === 0) return;
     e.preventDefault();
-    void Promise.all(
+    void Promise.allSettled(
       files.map((f) => window.md.files.read(window.md.files.pathForFile(f))),
-    ).then(openFiles);
+    ).then((results) => {
+      openFiles(
+        results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : [])),
+      );
+      const failed = results.flatMap((r, i) =>
+        r.status === 'rejected'
+          ? [`"${files[i].name}" (${errorText(r.reason)})`]
+          : [],
+      );
+      if (failed.length > 0)
+        banners.show({
+          key: 'open-failed',
+          tone: 'danger',
+          message: `Could not open ${failed.join(', ')}.`,
+          actions: [],
+        });
+    });
   });
 
   installAltOverlay();
@@ -704,7 +771,18 @@ async function boot(): Promise<void> {
 
   // ---- Start: this window's saved tabs, then documents handed over by another window,
   //      then files given on the command line; a blank tab only if nothing else ----
-  const restored = await session.restore();
+  let restored = false;
+  try {
+    restored = await session.restore();
+  } catch (err) {
+    // Storage unreadable: still give the user an editor, and say what that means.
+    banners.show({
+      key: 'restore-failed',
+      tone: 'danger',
+      message: `Your saved tabs could not be loaded (${errorText(err)}). Anything typed now stays in this tab only until you save it.`,
+      actions: [],
+    });
+  }
   const handed = await window.md.windows.ready();
   for (const s of handed) addFromSnapshot(s);
   const startup = await window.md.getStartupFiles();

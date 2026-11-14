@@ -7,6 +7,9 @@ export to HTML, PDF and, through Pandoc, Word and other formats.
 Every design decision is recorded in [PLAN.md](PLAN.md) with a citation, a standard,
 vendor documentation, or an explicit review item. Citation details are in `literature/`.
 
+The same editor also builds for the browser, for reading and editing Markdown on a phone:
+see [Web version](#web-version-phones-and-tablets).
+
 ## Run from source
 
 ```bash
@@ -41,6 +44,38 @@ npm run make         # out/make/squirrel.windows/x64/MD-<version> Setup.exe and 
 ```
 
 The installer is unsigned (PLAN.md R-14); Windows SmartScreen will warn on first run.
+
+## Web version (phones and tablets)
+
+`web/` builds the renderer for a browser (PLAN.md §35). It is the desktop app's editor,
+preview, tabs, themes, drafts and export with a browser stand-in for the Electron side
+(`web/api.ts`): on a phone the editor sits above the preview, Save means share or download,
+and nothing is sent to a server. There is no document library: documents live in the open
+tabs, survive relaunches through the session drafts, and leave through the share sheet.
+
+```bash
+npm run dev:web        # http://localhost:5180/ with hot reload
+npm run build:web      # web/dist
+npm run preview:web    # serves web/dist at http://localhost:4180/
+npm run test:e2e:web   # Playwright at an iPhone viewport against the production build
+```
+
+Deploy: the repo is connected to Cloudflare Workers Builds (`wrangler.jsonc`, Worker
+`md-web`, static assets from `web/dist`). Build command `npm run check && npm run build:web`,
+deploy command `npx wrangler deploy`. Every push to `main` is production at
+<https://md.giancarloguevarra.com/>; other branches get preview addresses. On the phone, open
+the address in Safari, tap Share, then Add to Home Screen: installed, it works offline and
+Safari's seven-day storage cleanup does not apply.
+
+What differs from the desktop build, and why, is in PLAN.md §35 and decisions D-28 to D-34.
+Things Chromium-based tests cannot cover, to check on the device after a deploy: the Save
+dialog's Share… button opens the share sheet with the `.md` file; Export › PDF opens the
+print sheet with Save to Files; the preview stays visible while typing with the keyboard up.
+
+`npm run test:e2e:web` needs Playwright's Chromium to start: on a Linux box without the
+browser's system libraries, `npx playwright install-deps` (needs sudo) installs them, and at
+least one font must be present (with no fonts, CodeMirror cannot place the caret and the
+typing tests fail for that reason alone).
 
 ## Running on a PC with Smart App Control
 

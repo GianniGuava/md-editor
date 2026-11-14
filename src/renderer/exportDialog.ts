@@ -120,7 +120,10 @@ export function createExportDialog(
 
   const renderList = () => {
     list.innerHTML = '';
+    // No Pandoc and no way to install it (the browser build): leave those rows out.
+    const pandocPossible = !caps || !!caps.pandoc || !!caps.installCommand;
     for (const f of FORMATS) {
+      if (f.needs !== 'none' && !pandocPossible) continue;
       const available =
         f.needs === 'none' ||
         (f.needs === 'pandoc' && !!caps?.pandoc) ||
@@ -145,7 +148,7 @@ export function createExportDialog(
       });
       list.appendChild(row);
     }
-    if (!caps?.pandoc) {
+    if (!caps?.pandoc && pandocPossible) {
       const help = document.createElement('div');
       help.className = 'export-help';
       help.innerHTML = `<span>Pandoc adds Word, OpenDocument, EPUB, RTF and LaTeX. Install it with:</span>

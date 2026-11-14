@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- The Content-Security-Policy is sent as a response header (web/public/_headers),
+         the same policy as the desktop index.html minus file: and the dev-server sources. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#e6e6e6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MD" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>MD</title>
+  </head>
+  <body>
+    <header role="banner" aria-label="Tabs and toolbar" id="chrome">
+      <div id="tabbar"></div>
+      <div id="toolbar"></div>
+    </header>
+    <div id="banners"></div>
+    <main id="workspace" aria-label="Editor and preview"></main>
+    <footer id="status" aria-live="polite" aria-label="Status">
+      <span id="status-main"></span>
+      <span id="status-note"></span>
+    </footer>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
