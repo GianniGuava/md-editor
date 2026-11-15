@@ -3,10 +3,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
+  Stop,
   checkBundle,
+  explain,
   firstArgument,
+  install,
+  isEntryScript,
   isMdApp,
+  parseShortcutOutput,
+  removeOurs,
+  runEach,
   runtimeNeedsCopy,
   samePath,
   shortcutDecision,
@@ -65,6 +73,20 @@ describe('checkBundle', () => {
       'const MAIN_WINDOW_VITE_DEV_SERVER_URL = "http://localhost:5173";',
     );
     expect(checkBundle(dir).join('\n')).toMatch(/development build/);
+  });
+
+  it('reports a missing main process bundle', () => {
+    productionLayout();
+    fs.rmSync(path.join(dir, '.vite/build/main.cjs'));
+    expect(checkBundle(dir).join('\n')).toMatch(/main\.cjs is missing/);
+  });
+
+  it('reports a development build that uses 127.0.0.1 or [::1]', () => {
+    for (const host of ['127.0.0.1', '[::1]']) {
+      productionLayout();
+      write('.vite/build/main.cjs', `const URL = "http://${host}:5173";`);
+      expect(checkBundle(dir).join('\n')).toMatch(/development build/);
+    }
   });
 
   it('reports a package.json whose main is not the built bundle', () => {
@@ -177,6 +199,38 @@ describe('shortcutDecision', () => {
     ).toBe('leave');
   });
 
+  it('leaves an existing shortcut whose target is not a file (empty target)', () => {
+    // A shortcut to a Store app or a special folder reads back with an empty TargetPath.
+    expect(shortcutDecision({ target: '', args: '' }, known)).toBe('leave');
+    expect(shortcutDecision({ target: '', args: '"C:\\Users\\X\\md-editor"' }, known)).toBe(
+      'leave',
+    );
+  });
+
+  it('leaves a shortcut that is not Electron even when its argument is an MD repo', () => {
+    expect(
+      shortcutDecision(
+        {
+          target: 'C:\\Program Files\\Notepad++\\notepad++.exe',
+          args: '"C:\\Users\\X\\md-editor"',
+        },
+        known,
+      ),
+    ).toBe('leave');
+  });
+
+  it('matches the repo runtime path in any letter case', () => {
+    expect(
+      shortcutDecision(
+        {
+          target: 'C:\\Users\\X\\md-editor\\NODE_MODULES\\Electron\\DIST\\Electron.EXE',
+          args: '"C:\\Users\\X\\md-editor" --appdata',
+        },
+        known,
+      ),
+    ).toBe('update');
+  });
+
   it('leaves a shortcut that points somewhere else', () => {
     expect(
       shortcutDecision({ target: 'C:\\Program Files\\Other\\other.exe', args: '' }, known),
@@ -194,5 +248,325 @@ describe('isMdApp', () => {
     write('other/package.json', JSON.stringify({ name: 'other' }));
     expect(isMdApp(path.join(dir, 'other'))).toBe(false);
     expect(isMdApp(path.join(dir, 'nothing'))).toBe(false);
+  });
+});
+
+describe('parseShortcutOutput', () => {
+  it('keeps an empty target line instead of reading the arguments as the target', () => {
+    expect(parseShortcutOutput('\r\n"C:\\Users\\X\\md-editor" --appdata\r\n')).toEqual({
+      target: '',
+      args: '"C:\\Users\\X\\md-editor" --appdata',
+    });
+  });
+
+  it('drops a byte-order mark and Windows line endings', () => {
+    expect(parseShortcutOutput('\uFEFFC:\\a\\electron.exe\r\n"C:\\Café"\r\n')).toEqual({
+      target: 'C:\\a\\electron.exe',
+      args: '"C:\\Café"',
+    });
+  });
+
+  it('gives empty strings for empty output', () => {
+    expect(parseShortcutOutput('')).toEqual({ target: '', args: '' });
+  });
+});
+
+describe('isEntryScript', () => {
+  it('recognises the script when it is started through a symlink or junction', () => {
+    write('real/script.mjs', '');
+    const real = path.join(dir, 'real', 'script.mjs');
+    const link = path.join(dir, 'link');
+    fs.symlinkSync(path.join(dir, 'real'), link, 'junction');
+    expect(isEntryScript(path.join(link, 'script.mjs'), pathToFileURL(real).href)).toBe(true);
+  });
+
+  it('is false for another script or no script', () => {
+    write('a.mjs', '');
+    write('b.mjs', '');
+    const url = pathToFileURL(path.join(dir, 'a.mjs')).href;
+    expect(isEntryScript(path.join(dir, 'b.mjs'), url)).toBe(false);
+    expect(isEntryScript(undefined, url)).toBe(false);
+  });
+});
+
+describe('explain', () => {
+  const err = (code: string) =>
+    Object.assign(new Error(`${code}: something`), { code, path: 'C:\\x\\file' });
+
+  it('explains a file in use in plain words', () => {
+    for (const code of ['EBUSY', 'EPERM', 'EACCES']) {
+      const text = explain(err(code));
+      expect(text).toMatch(/in use/);
+      expect(text).toContain('C:\\x\\file');
+    }
+  });
+
+  it('explains a full disk in plain words', () => {
+    expect(explain(err('ENOSPC'))).toMatch(/disk is full/);
+  });
+
+  it('gives nothing for other errors, so the caller shows the details', () => {
+    expect(explain(err('EWHATEVER'))).toBeUndefined();
+    expect(explain(new Error('plain'))).toBeUndefined();
+  });
+});
+
+describe('runEach', () => {
+  it('runs every step even when an earlier one throws, and returns the failures', () => {
+    const ran: string[] = [];
+    const failures = runEach([
+      ['first', () => ran.push('first')],
+      [
+        'second',
+        () => {
+          throw new Error('boom');
+        },
+      ],
+      ['third', () => ran.push('third')],
+    ]);
+    expect(ran).toEqual(['first', 'third']);
+    expect(failures.map((f: { what: string }) => f.what)).toEqual(['second']);
+  });
+});
+
+/* ---------------- install() against temporary folders ---------------- */
+
+const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+describe('removeOurs', () => {
+  it.skipIf(isRoot)('deletes the marker last, so a half-deleted folder is still ours', () => {
+    write('inst/.md-desktop', 'marker');
+    write('inst/a/locked/file', 'x');
+    const locked = path.join(dir, 'inst', 'a', 'locked');
+    fs.chmodSync(locked, 0o555);
+    try {
+      expect(() => removeOurs(path.join(dir, 'inst'))).toThrow();
+      expect(fs.existsSync(path.join(dir, 'inst', '.md-desktop'))).toBe(true);
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+    removeOurs(path.join(dir, 'inst'));
+    expect(fs.existsSync(path.join(dir, 'inst'))).toBe(false);
+  });
+
+  it('does nothing when the folder is missing', () => {
+    expect(() => removeOurs(path.join(dir, 'nothing'))).not.toThrow();
+  });
+});
+
+describe('install', () => {
+  let repo: string;
+  let inst: string;
+  let lines: string[];
+
+  const makeRepo = (version = '44.8.0') => {
+    write('repo/package.json', JSON.stringify({ name: 'md-editor', main: '.vite/build/main.cjs' }));
+    write('repo/.vite/build/main.cjs', 'win.loadFile("../renderer/main_window/index.html");');
+    write('repo/.vite/build/preload.cjs', '"use strict";');
+    write('repo/.vite/renderer/main_window/index.html', '<!doctype html>');
+    write('repo/assets/app.ico', 'ico');
+    write('repo/node_modules/electron/dist/electron.exe', `exe ${version}`);
+    write('repo/node_modules/electron/dist/version', version);
+  };
+
+  const run = (extra: Record<string, unknown> = {}) =>
+    install({
+      repoDir: repo,
+      installDir: inst,
+      shortcut: false,
+      log: (l: string) => lines.push(l),
+      ...extra,
+    });
+
+  const read = (rel: string) => fs.readFileSync(path.join(inst, rel), 'utf8');
+
+  beforeEach(() => {
+    repo = path.join(dir, 'repo');
+    inst = path.join(dir, 'MD-desktop');
+    lines = [];
+    makeRepo();
+  });
+
+  it('installs app, runtime and marker into a new folder', () => {
+    run();
+    expect(read('app/.vite/renderer/main_window/index.html')).toBe('<!doctype html>');
+    expect(read('app/assets/app.ico')).toBe('ico');
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    expect(fs.existsSync(path.join(inst, '.md-desktop'))).toBe(true);
+    expect(fs.existsSync(`${inst}.new`)).toBe(false);
+    expect(fs.existsSync(`${inst}.old`)).toBe(false);
+    expect(lines.join('\n')).toMatch(/Installed to/);
+  });
+
+  it('keeps the runtime when the version is unchanged, and removes the previous copy', () => {
+    run();
+    fs.appendFileSync(path.join(inst, 'runtime', 'electron.exe'), ' (installed)');
+    write('repo/.vite/renderer/main_window/index.html', '<!doctype html><p>v2');
+    lines = [];
+    run();
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0 (installed)');
+    expect(read('app/.vite/renderer/main_window/index.html')).toContain('v2');
+    expect(lines.join('\n')).toMatch(/kept/);
+    expect(fs.existsSync(`${inst}.old`)).toBe(false);
+  });
+
+  it('copies a new runtime when the version changes', () => {
+    run();
+    makeRepo('45.0.0');
+    run();
+    expect(read('runtime/electron.exe')).toBe('exe 45.0.0');
+  });
+
+  it('refuses a folder it did not make and leaves it untouched', () => {
+    write('MD-desktop/mine.txt', 'keep');
+    expect(() => run()).toThrow(Stop);
+    expect(read('mine.txt')).toBe('keep');
+  });
+
+  it('refuses a development build and leaves the installed copy unchanged', () => {
+    run();
+    write('repo/.vite/build/main.cjs', 'loadURL("http://localhost:5173")');
+    expect(() => run()).toThrow(/development build/);
+    expect(read('app/.vite/build/main.cjs')).toContain('loadFile');
+  });
+
+  it("removes a marked leftover from an interrupted run's staging folder", () => {
+    write('MD-desktop.new/.md-desktop', 'marker');
+    write('MD-desktop.new/app/half', 'x');
+    run();
+    expect(fs.existsSync(`${inst}.new`)).toBe(false);
+    expect(fs.existsSync(path.join(inst, 'app', 'half'))).toBe(false);
+  });
+
+  it('puts the previous copy back when an earlier run was killed mid-install', () => {
+    run();
+    // State after a kill between moving the copy aside and the swap, with the runtime
+    // already moved into the staging folder.
+    fs.renameSync(inst, `${inst}.old`);
+    fs.mkdirSync(`${inst}.new`);
+    fs.writeFileSync(path.join(`${inst}.new`, '.md-desktop'), 'marker');
+    fs.renameSync(path.join(`${inst}.old`, 'runtime'), path.join(`${inst}.new`, 'runtime'));
+    run();
+    expect(lines.join('\n')).toMatch(/interrupted/);
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    expect(fs.existsSync(`${inst}.old`)).toBe(false);
+    expect(fs.existsSync(`${inst}.new`)).toBe(false);
+  });
+
+  it.skipIf(isRoot)(
+    'keeps the last working copy when a run after a killed one also fails',
+    () => {
+      run();
+      fs.renameSync(inst, `${inst}.old`);
+      write('repo/.vite/renderer/main_window/unreadable.js', 'x');
+      const unreadable = path.join(repo, '.vite/renderer/main_window/unreadable.js');
+      fs.chmodSync(unreadable, 0o000);
+      try {
+        expect(() => run()).toThrow();
+      } finally {
+        fs.chmodSync(unreadable, 0o644);
+      }
+      expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+      expect(read('app/.vite/renderer/main_window/index.html')).toBe('<!doctype html>');
+    },
+  );
+
+  it.skipIf(isRoot)('restores the previous copy exactly when copying the build fails', () => {
+    run();
+    write('repo/.vite/renderer/main_window/unreadable.js', 'x');
+    const unreadable = path.join(repo, '.vite/renderer/main_window/unreadable.js');
+    fs.chmodSync(unreadable, 0o000);
+    try {
+      expect(() => run()).toThrow(expect.objectContaining({ code: 'EACCES' }));
+    } finally {
+      fs.chmodSync(unreadable, 0o644);
+    }
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    expect(fs.existsSync(path.join(inst, 'app', '.vite', 'renderer', 'main_window', 'unreadable.js'))).toBe(false);
+    expect(fs.existsSync(`${inst}.new`)).toBe(false);
+    expect(fs.existsSync(`${inst}.old`)).toBe(false);
+  });
+
+  it.skipIf(isRoot)('moves a reused runtime back when a later step fails', () => {
+    run();
+    write('MD-desktop/app/.dev-userdata/locked', 'x');
+    const locked = path.join(inst, 'app/.dev-userdata/locked');
+    fs.chmodSync(locked, 0o000);
+    try {
+      expect(() => run()).toThrow();
+      expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+      expect(fs.existsSync(locked)).toBe(true);
+    } finally {
+      fs.chmodSync(locked, 0o644);
+    }
+  });
+
+  it('carries a profile in app\\.dev-userdata over to the new copy', () => {
+    run();
+    write('MD-desktop/app/.dev-userdata/session.json', '{"tabs":[]}');
+    run();
+    expect(read('app/.dev-userdata/session.json')).toBe('{"tabs":[]}');
+  });
+
+  describe('Desktop shortcut', () => {
+    let desktop: string;
+    let lnk: string;
+    let writes: Record<string, string>[];
+
+    const stub =
+      (shortcutText: string | null, fail = false) =>
+      (script: string, env: Record<string, string> = {}) => {
+        if (fail) throw new Error('powershell.exe was not found\n    at stack line');
+        if (script.includes('GetFolderPath')) return desktop;
+        if (script.includes('$s.Save()')) {
+          writes.push(env);
+          return '';
+        }
+        return shortcutText ?? '';
+      };
+
+    beforeEach(() => {
+      desktop = path.join(dir, 'Desktop');
+      lnk = path.join(desktop, 'MD.lnk');
+      fs.mkdirSync(desktop);
+      writes = [];
+    });
+
+    it('retargets a shortcut that ran the repo, and says what it now runs', () => {
+      fs.writeFileSync(lnk, 'lnk');
+      const target = path.join(repo, 'node_modules', 'electron', 'dist', 'electron.exe');
+      run({ shortcut: true, powershell: stub(`${target}\r\n"${repo}" --appdata\r\n`) });
+      expect(writes).toHaveLength(1);
+      expect(writes[0].MD_TARGET).toBe(path.join(inst, 'runtime', 'electron.exe'));
+      expect(writes[0].MD_ARGS).toBe(`"${path.join(inst, 'app')}" --appdata`);
+      expect(lines.join('\n')).toMatch(/now runs/);
+    });
+
+    it('leaves an existing shortcut with an empty target alone', () => {
+      fs.writeFileSync(lnk, 'lnk');
+      run({ shortcut: true, powershell: stub('\r\n\r\n') });
+      expect(writes).toHaveLength(0);
+      expect(lines.join('\n')).toMatch(/left unchanged/);
+    });
+
+    it('creates the shortcut when there is none', () => {
+      run({ shortcut: true, powershell: stub(null) });
+      expect(writes).toHaveLength(1);
+    });
+
+    it('explains how to finish by hand when the shortcut step fails after a good install', () => {
+      let caught: unknown;
+      try {
+        run({ shortcut: true, powershell: stub(null, true) });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Stop);
+      const text = (caught as Error).message;
+      expect(text).toMatch(/installed/i);
+      expect(text).toContain(path.join(inst, 'runtime', 'electron.exe'));
+      expect(text).not.toMatch(/at stack line/);
+      expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    });
   });
 });

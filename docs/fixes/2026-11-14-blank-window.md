@@ -1,6 +1,6 @@
 # Fix: blank desktop window after `npm start` (2026-11-14)
 
-Size: Medium (build-workflow). Branch: `fix/desktop-shortcut-build`, local until Gianni says to push.
+Size: Medium (build-workflow). Branch: `fix/desktop-shortcut-build`, on GitHub since 2026-11-14.
 
 ## Spec
 
@@ -91,3 +91,22 @@ About $13 to $15 from here [INFERRED]: build and tests about $5 to $7, live chec
 - Found in the first live install: the shortcut matcher compared `MD.lnk` with the runtime of the checkout running the script (the fix-branch folder), so it left the real shortcut, which points at the main checkout, unchanged. It now recognises any shortcut that runs an md-editor checkout through a repo's Electron runtime; tests added first (they failed, then passed). Claude, 2026-11-14.
 - Done checks 2 and 5 used `npm start` in the fix-branch folder, not the main checkout, so the main checkout's `.vite/` (which `MD (2).lnk` still uses) was not disturbed. The installed copy references neither checkout (check 3). Claude, 2026-11-14.
 - `README.md`: the Smart App Control section now describes `npm run install:desktop`. The old example path there contained a tab character where a backslash followed by t had been typed (`C:\path<tab>o\md-editor`); that line is replaced. Claude's call, 2026-11-14.
+- The "MD is open" stop (done check 4) was doubted by the scan's first reader; the live test with real Electron, started from a working folder outside the install folder, stopped with EPERM and left the installed copy unchanged, so it works. Recorded here as the plan asked. Claude, 2026-11-14.
+
+## Scan findings and their fixes
+
+The scan (Sonnet at xhigh, then Opus and Fable at high) found 3 medium and 6 low issues in `tools/desktop-install.mjs` at 9db73d9; the list and verdicts are in the handoff `docs/fixes/2026-11-14-handoff-desktop-blank-window.md`, section 5. Gianni, 2026-11-14, on the fix plan and a narrow Opus re-check: "1 yes 2 yes 3 yes". All fixed in one commit, tests first (27 new tests failed before the change, all pass after):
+
+1. Started through a junction or symlink, the script did nothing and exited 0. It now compares real paths (`isEntryScript`). Reproduced on Linux with the old script through a symlink (exit 0, no output) and checked fixed.
+2. An existing `MD.lnk` whose target reads back empty (a Store app, a special folder) was overwritten. It is now left alone with a message; a missing `MD.lnk` is still created.
+3. Non-ASCII paths: PowerShell now writes UTF-8 without a byte-order mark, the output is parsed line by line without trimming away an empty first line (`parseShortcutOutput`), and a failure of the shortcut step after a good install prints how to make the shortcut by hand instead of a stack trace.
+4. Interrupted installs: the marker is written first into the staging folder and deleted last (`removeOurs`); if the install folder is missing and a marked `.old` exists, it is put back (with its runtime, if that had been moved into the staging folder) before anything is cleaned, so a second failure cannot delete the last working copy.
+5. Rollback: each undo step runs even if one before it fails (`runEach`), failures are logged, and the original error is the one reported.
+6. File in use and disk full now get plain messages (`explain`); other errors still show the details.
+7. Tests now cover the three matcher gaps (non-Electron target with an md-editor argument, upper-case runtime path, missing `main.cjs`) and `install()` itself against temporary folders, with a stand-in for PowerShell.
+8. The dev-build check also matches `127.0.0.1` and `[::1]`.
+9. A profile in the installed copy's `app\.dev-userdata` (made only if the runtime is started without `--appdata`) is carried over to the new copy. The script now has `// @ts-check`, so the earlier claim that `tsconfig.json` checks it is true (it found five untyped `catch` variables, now typed).
+
+Also: `.oxfmtrc.json` ignores `docs/fixes/*-handoff-*.md`, because the formatter would change Gianni's quoted words in the handoff (a double space inside a quote). After the install script's final line, the log now says what `MD.lnk` runs.
+
+Checked on claude-dev (Linux), 2026-11-14: `npm run check` passes (typecheck, lint, format, 169 unit tests). Not checked there: `npm run test:e2e` and done checks 1 to 6 and 8, which need Windows and the real Electron window; they are to be rerun on the PC, followed by `npm run install:desktop`.

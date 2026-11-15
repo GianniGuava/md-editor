@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Install the desktop copy of MD (docs/fixes/2026-11-14-blank-window.md).
  *
@@ -15,7 +16,9 @@
  * Layout of the install folder:
  *   app\       package.json, .vite\build, .vite\renderer, assets\app.ico
  *   runtime\   copy of node_modules\electron\dist (copied only when the version changes)
- *   .md-desktop  marker: the script only ever replaces a folder that carries it
+ *   .md-desktop  marker: the script only ever replaces a folder that carries it. It is
+ *                written first into a new folder and deleted last, so a folder left half
+ *                made or half deleted by an interrupted run still carries it.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,6 +38,7 @@ const MARKER = '.md-desktop';
  */
 export const checkBundle = (appDir) => {
   const problems = [];
+  /** @param {string} rel */
   const at = (rel) => path.join(appDir, rel);
 
   let main;
@@ -50,7 +54,9 @@ export const checkBundle = (appDir) => {
   if (!fs.existsSync(at(MAIN))) {
     problems.push(`${MAIN} is missing: the main process was not built.`);
   } else {
-    const devUrl = fs.readFileSync(at(MAIN), 'utf8').match(/https?:\/\/localhost:\d+/);
+    const devUrl = fs
+      .readFileSync(at(MAIN), 'utf8')
+      .match(/https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):\d+/);
     if (devUrl) {
       problems.push(
         `${MAIN} is a development build: its window loads ${devUrl[0]}, a dev server ` +
@@ -67,6 +73,7 @@ export const checkBundle = (appDir) => {
   return problems;
 };
 
+/** @param {string} dir */
 const readVersion = (dir) => {
   try {
     return fs.readFileSync(path.join(dir, 'version'), 'utf8').trim();
@@ -89,8 +96,13 @@ export const runtimeNeedsCopy = (srcDist, destRuntime) => {
   );
 };
 
-/** Windows path equality: case, slash direction and a trailing slash do not matter. */
+/**
+ * Windows path equality: case, slash direction and a trailing slash do not matter.
+ * @param {string} a
+ * @param {string} b
+ */
 export const samePath = (a, b) => {
+  /** @param {string} p */
   const norm = (p) =>
     path.win32
       .normalize(p)
@@ -109,7 +121,10 @@ export const firstArgument = (args) => {
   return m ? (m[1] ?? m[2]) : undefined;
 };
 
-/** Whether `dir` is a checkout of this project (its package.json is md-editor). */
+/**
+ * Whether `dir` is a checkout of this project (its package.json is md-editor).
+ * @param {string} dir
+ */
 export const isMdApp = (dir) => {
   try {
     return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name === 'md-editor';
@@ -121,16 +136,18 @@ export const isMdApp = (dir) => {
 const REPO_RUNTIME_TAIL = ['node_modules', 'electron', 'dist', 'electron.exe'];
 
 /**
- * What to do with MD.lnk (null when there is no shortcut). Only a shortcut that starts
- * MD is changed: one already pointing at the install folder's runtime, or one running a
- * checkout of this project through a repo's Electron runtime (the old way, from any
- * checkout). Anything else is the user's and is left alone.
+ * What to do with MD.lnk (`current` is null when there is no shortcut). Only a shortcut
+ * that starts MD is changed: one already pointing at the install folder's runtime, or one
+ * running a checkout of this project through a repo's Electron runtime (the old way, from
+ * any checkout). Anything else is the user's and is left alone, including a shortcut whose
+ * target reads back empty (one that starts a Store app or a special folder).
  * @param {{ target: string, args: string } | null} current
  * @param {{ installElectron: string, isMdApp: (dir: string) => boolean }} known
  * @returns {'create' | 'update' | 'leave'}
  */
 export const shortcutDecision = (current, known) => {
-  if (!current || !current.target) return 'create';
+  if (!current) return 'create';
+  if (!current.target) return 'leave';
   if (samePath(current.target, known.installElectron)) return 'update';
   const parts = path.win32.normalize(current.target).split('\\');
   const tail = parts.slice(-REPO_RUNTIME_TAIL.length).map((p) => p.toLowerCase());
@@ -141,17 +158,124 @@ export const shortcutDecision = (current, known) => {
   return 'leave';
 };
 
+/**
+ * The target (first line) and arguments (second line) printed by the PowerShell query.
+ * An empty first line is kept: trimming the whole output would make the arguments look
+ * like the target.
+ * @param {string} text
+ */
+export const parseShortcutOutput = (text) => {
+  const [target = '', args = ''] = String(text)
+    .replace(/^\uFEFF/, '')
+    .trimEnd()
+    .split(/\r?\n/);
+  return { target: target.trim(), args: args.trim() };
+};
+
+/**
+ * Whether the script at `argv1` is this module, comparing real paths so that starting it
+ * through a junction or symlink still counts (Node resolves the module's own path).
+ * @param {string | undefined} argv1 process.argv[1]
+ * @param {string} moduleUrl import.meta.url
+ */
+export const isEntryScript = (argv1, moduleUrl) => {
+  if (argv1 === undefined) return false;
+  /** @param {string} p */
+  const real = (p) => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return samePath(real(fileURLToPath(moduleUrl)), real(argv1));
+};
+
+/**
+ * A plain explanation for the file-system errors a user can fix, or undefined.
+ * @param {any} err
+ * @returns {string | undefined}
+ */
+export const explain = (err) => {
+  const where = err?.path ? ` (${err.path})` : '';
+  switch (err?.code) {
+    case 'EBUSY':
+    case 'EPERM':
+    case 'EACCES':
+      return (
+        `Windows would not let the install change a file${where}: ${err.code}. The file is ` +
+        'usually in use (close every MD window, and any Explorer window or terminal open in ' +
+        'the install folder) or read-only. Run this again once it is free.'
+      );
+    case 'ENOSPC':
+      return (
+        `The disk is full${where}. The install needs about 400 MB free, twice that when the ` +
+        'Electron version changes. Free some space and run this again.'
+      );
+    default:
+      return undefined;
+  }
+};
+
+/**
+ * Run every step, even after one throws; return the ones that failed.
+ * @param {[string, () => unknown][]} steps
+ * @returns {{ what: string, error: any }[]}
+ */
+export const runEach = (steps) => {
+  const failures = [];
+  for (const [what, step] of steps) {
+    try {
+      step();
+    } catch (error) {
+      failures.push({ what, error });
+    }
+  }
+  return failures;
+};
+
+/** @param {string} dir */
+const hasMarker = (dir) => fs.existsSync(path.join(dir, MARKER));
+
+/**
+ * Delete one of this script's folders, its marker last, so a delete that fails midway
+ * leaves a folder the next run still recognises as its own.
+ * @param {string} dir
+ */
+export const removeOurs = (dir) => {
+  if (!fs.existsSync(dir)) return;
+  for (const name of fs.readdirSync(dir)) {
+    if (name !== MARKER) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+};
+
 /* ---------------- Running the install ---------------- */
 
-class Stop extends Error {}
+export class Stop extends Error {}
 
-const powershell = (script, env = {}) =>
-  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-    env: { ...process.env, ...env },
-    encoding: 'utf8',
-  }).trim();
+/**
+ * Run a PowerShell command and return its output. The console is switched to UTF-8
+ * (without a byte-order mark) so non-ASCII paths come back intact.
+ * @param {string} script
+ * @param {Record<string, string>} [env]
+ */
+const runPowershell = (script, env = {}) =>
+  execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false; ${script}`,
+    ],
+    { env: { ...process.env, ...env }, encoding: 'utf8' },
+  );
 
-/** Refuse to touch a folder this script did not make. */
+/**
+ * Refuse to touch a folder this script did not make.
+ * @param {string} dir
+ */
 const assertOurs = (dir) => {
   if (fs.existsSync(dir) && !fs.existsSync(path.join(dir, MARKER))) {
     throw new Stop(
@@ -161,8 +285,24 @@ const assertOurs = (dir) => {
   }
 };
 
-const install = ({ repoDir, installDir, shortcut }) => {
-  const log = (line) => console.log(`[install:desktop] ${line}`);
+/**
+ * Install (or reinstall) the desktop copy. Exported for the tests, which pass `log` and a
+ * stand-in for `powershell`.
+ * @param {{
+ *   repoDir: string,
+ *   installDir: string,
+ *   shortcut: boolean,
+ *   log?: (line: string) => void,
+ *   powershell?: (script: string, env?: Record<string, string>) => string,
+ * }} options
+ */
+export const install = ({
+  repoDir,
+  installDir,
+  shortcut,
+  log = (line) => console.log(`[install:desktop] ${line}`),
+  powershell = runPowershell,
+}) => {
   const srcDist = path.join(repoDir, 'node_modules', 'electron', 'dist');
   const stage = `${installDir}.new`;
   const old = `${installDir}.old`;
@@ -180,16 +320,28 @@ const install = ({ repoDir, installDir, shortcut }) => {
   }
   for (const dir of [installDir, stage, old]) assertOurs(dir);
 
+  // An earlier run was killed after moving the installed copy aside: put it back first,
+  // so the clean-up below can never delete the last working copy.
+  if (!fs.existsSync(installDir) && hasMarker(old)) {
+    const oldRuntime = path.join(old, 'runtime');
+    const stagedRuntime = path.join(stage, 'runtime');
+    if (!fs.existsSync(oldRuntime) && fs.existsSync(stagedRuntime)) {
+      fs.renameSync(stagedRuntime, oldRuntime);
+    }
+    fs.renameSync(old, installDir);
+    log(`Put back the copy an interrupted install had moved to ${old}.`);
+  }
+
   // Leftovers from an interrupted run are ours (they carry the marker).
-  fs.rmSync(stage, { recursive: true, force: true });
-  fs.rmSync(old, { recursive: true, force: true });
+  removeOurs(stage);
+  removeOurs(old);
 
   // Moving the current copy aside fails while MD runs from it: stop before changing anything.
   const hadInstall = fs.existsSync(installDir);
   if (hadInstall) {
     try {
       fs.renameSync(installDir, old);
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       if (['EPERM', 'EBUSY', 'EACCES'].includes(err.code)) {
         throw new Stop(
           `Windows would not move ${installDir} (${err.code}), which usually means MD is ` +
@@ -201,7 +353,13 @@ const install = ({ repoDir, installDir, shortcut }) => {
   }
 
   let reusedRuntime = false;
+  let keptProfile = false;
   try {
+    fs.mkdirSync(stage);
+    fs.writeFileSync(
+      path.join(stage, MARKER),
+      `MD desktop copy, installed ${new Date().toISOString()} from ${repoDir}\n`,
+    );
     const appDir = path.join(stage, 'app');
     fs.mkdirSync(path.join(appDir, 'assets'), { recursive: true });
     fs.copyFileSync(path.join(repoDir, 'package.json'), path.join(appDir, 'package.json'));
@@ -217,10 +375,14 @@ const install = ({ repoDir, installDir, shortcut }) => {
     } else {
       fs.cpSync(srcDist, path.join(stage, 'runtime'), { recursive: true });
     }
-    fs.writeFileSync(
-      path.join(stage, MARKER),
-      `MD desktop copy, installed ${new Date().toISOString()} from ${repoDir}\n`,
-    );
+
+    // A profile the installed copy made when started without --appdata lives in
+    // app\.dev-userdata; carry it over rather than delete it with the old copy.
+    const oldProfile = path.join(old, 'app', '.dev-userdata');
+    if (hadInstall && fs.existsSync(oldProfile)) {
+      fs.cpSync(oldProfile, path.join(appDir, '.dev-userdata'), { recursive: true });
+      keptProfile = true;
+    }
 
     const staged = checkBundle(appDir);
     if (!fs.existsSync(path.join(stage, 'runtime', 'electron.exe'))) {
@@ -230,26 +392,43 @@ const install = ({ repoDir, installDir, shortcut }) => {
 
     fs.renameSync(stage, installDir);
   } catch (err) {
-    // Put the previous copy back exactly as it was.
-    if (reusedRuntime && fs.existsSync(path.join(stage, 'runtime'))) {
-      fs.renameSync(path.join(stage, 'runtime'), path.join(old, 'runtime'));
-    }
-    fs.rmSync(stage, { recursive: true, force: true });
-    if (hadInstall && !fs.existsSync(installDir) && fs.existsSync(old)) {
-      fs.renameSync(old, installDir);
+    // Put the previous copy back exactly as it was. Each step runs even if one before it
+    // fails, and the original error is the one reported.
+    const failures = runEach([
+      [
+        'move the reused runtime back',
+        () => {
+          if (reusedRuntime && fs.existsSync(path.join(stage, 'runtime'))) {
+            fs.renameSync(path.join(stage, 'runtime'), path.join(old, 'runtime'));
+          }
+        },
+      ],
+      ['remove the unfinished copy', () => removeOurs(stage)],
+      [
+        'put the previous copy back',
+        () => {
+          if (hadInstall && !fs.existsSync(installDir) && fs.existsSync(old)) {
+            fs.renameSync(old, installDir);
+          }
+        },
+      ],
+    ]);
+    for (const { what, error } of failures) {
+      log(`While undoing the install, could not ${what}: ${error.code ?? error.message}.`);
     }
     throw err;
   }
 
   try {
-    fs.rmSync(old, { recursive: true, force: true });
-  } catch (err) {
+    removeOurs(old);
+  } catch (/** @type {any} */ err) {
     log(`Could not remove the previous copy ${old} (${err.code}); it is removed on the next install.`);
   }
 
   const version = readVersion(path.join(installDir, 'runtime'));
   log(`Installed to ${installDir}`);
   log(`Electron ${version}, runtime ${reusedRuntime ? 'kept (same version)' : 'copied'}.`);
+  if (keptProfile) log('Kept the profile in app\\.dev-userdata from the previous copy.');
 
   if (!shortcut) {
     log('Shortcut left alone (--no-shortcut).');
@@ -257,48 +436,61 @@ const install = ({ repoDir, installDir, shortcut }) => {
   }
   const installElectron = path.join(installDir, 'runtime', 'electron.exe');
   const appDir = path.join(installDir, 'app');
-  const desktop = powershell("[Environment]::GetFolderPath('Desktop')");
-  const lnk = path.join(desktop, 'MD.lnk');
-  let current = null;
-  if (fs.existsSync(lnk)) {
-    const [target = '', args = ''] = powershell(
-      '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK); $s.TargetPath; $s.Arguments',
-      { MD_LNK: lnk },
-    ).split(/\r?\n/);
-    current = { target, args };
+  const command = `"${installElectron}" "${appDir}" --appdata`;
+  try {
+    const desktop = powershell("[Environment]::GetFolderPath('Desktop')").trim();
+    const lnk = path.join(desktop, 'MD.lnk');
+    let current = null;
+    if (fs.existsSync(lnk)) {
+      current = parseShortcutOutput(
+        powershell(
+          '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK); $s.TargetPath; $s.Arguments',
+          { MD_LNK: lnk },
+        ),
+      );
+    }
+    const decision = shortcutDecision(current, { installElectron, isMdApp });
+    if (decision === 'leave') {
+      log(
+        current?.target
+          ? `${lnk} starts ${current.target} ${current.args}, not MD, so it was left unchanged.`
+          : `${lnk} has no file as its target (it may start a Store app or a special folder), ` +
+              'so it was left unchanged.',
+      );
+      log(`To use the installed copy, make a shortcut to: ${command}`);
+      return;
+    }
+    powershell(
+      [
+        '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK)',
+        '$s.TargetPath = $env:MD_TARGET',
+        '$s.Arguments = $env:MD_ARGS',
+        '$s.WorkingDirectory = $env:MD_WD',
+        '$s.IconLocation = $env:MD_ICON',
+        "$s.Description = 'MD Markdown editor'",
+        '$s.Save()',
+      ].join('; '),
+      {
+        MD_LNK: lnk,
+        MD_TARGET: installElectron,
+        MD_ARGS: `"${appDir}" --appdata`,
+        MD_WD: appDir,
+        MD_ICON: `${path.join(appDir, ICON)},0`,
+      },
+    );
+    log(`${decision === 'create' ? 'Created' : 'Updated'} ${lnk}. It now runs: ${command}`);
+    log('Your session and drafts stay in %APPDATA%\\MD, as before.');
+  } catch (/** @type {any} */ err) {
+    const reason = String(err?.message ?? err).split(/\r?\n/)[0];
+    throw new Stop(
+      `MD was installed to ${installDir}, but the Desktop shortcut could not be set ` +
+        `(${reason}). To finish by hand, right-click the Desktop, choose New > Shortcut, ` +
+        `enter this as the location and name it MD:\n  ${command}`,
+    );
   }
-  const decision = shortcutDecision(current, { installElectron, isMdApp });
-  if (decision === 'leave') {
-    log(`${lnk} starts ${current.target} ${current.args}, not MD, so it was left unchanged.`);
-    log(`To use the installed copy, point a shortcut at ${installElectron} with arguments "${appDir}" --appdata`);
-    return;
-  }
-  powershell(
-    [
-      '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK)',
-      '$s.TargetPath = $env:MD_TARGET',
-      '$s.Arguments = $env:MD_ARGS',
-      '$s.WorkingDirectory = $env:MD_WD',
-      '$s.IconLocation = $env:MD_ICON',
-      "$s.Description = 'MD Markdown editor'",
-      '$s.Save()',
-    ].join('; '),
-    {
-      MD_LNK: lnk,
-      MD_TARGET: installElectron,
-      MD_ARGS: `"${appDir}" --appdata`,
-      MD_WD: appDir,
-      MD_ICON: `${path.join(appDir, ICON)},0`,
-    },
-  );
-  log(`${decision === 'create' ? 'Created' : 'Updated'} ${lnk}.`);
-  log('Your session and drafts stay in %APPDATA%\\MD, as before.');
 };
 
-const runDirectly =
-  process.argv[1] !== undefined && samePath(fileURLToPath(import.meta.url), path.resolve(process.argv[1]));
-
-if (runDirectly) {
+if (isEntryScript(process.argv[1], import.meta.url)) {
   if (process.platform !== 'win32') {
     console.error('[install:desktop] This installs the Windows desktop copy; it only runs on Windows.');
     process.exit(1);
@@ -314,8 +506,8 @@ if (runDirectly) {
   );
   try {
     install({ repoDir, installDir, shortcut: !process.argv.includes('--no-shortcut') });
-  } catch (err) {
-    console.error(`[install:desktop] ${err instanceof Stop ? err.message : err.stack}`);
+  } catch (/** @type {any} */ err) {
+    console.error(`[install:desktop] ${err instanceof Stop ? err.message : (explain(err) ?? err.stack)}`);
     process.exit(1);
   }
 }
