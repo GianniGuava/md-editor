@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   checkBundle,
+  firstArgument,
+  isMdApp,
   runtimeNeedsCopy,
   samePath,
   shortcutDecision,
@@ -115,30 +117,82 @@ describe('samePath', () => {
   });
 });
 
+describe('firstArgument', () => {
+  it('reads a quoted first argument', () => {
+    expect(firstArgument('"C:\\Users\\X\\md editor" --appdata')).toBe('C:\\Users\\X\\md editor');
+  });
+
+  it('reads an unquoted first argument', () => {
+    expect(firstArgument('C:\\Users\\X\\md-editor --appdata')).toBe('C:\\Users\\X\\md-editor');
+  });
+
+  it('gives undefined for no arguments', () => {
+    expect(firstArgument('   ')).toBeUndefined();
+  });
+});
+
 describe('shortcutDecision', () => {
+  const mdRepos = ['c:\\users\\x\\md-editor', 'c:\\users\\x\\md-editor\\.claude\\worktrees\\fix'];
   const known = {
-    repoElectron: 'C:\\Users\\X\\md-editor\\node_modules\\electron\\dist\\electron.exe',
     installElectron: 'C:\\Users\\X\\AppData\\Local\\MD-desktop\\runtime\\electron.exe',
+    isMdApp: (dir: string) => mdRepos.some((r) => samePath(r, dir)),
   };
+  const repoRuntime = 'C:\\Users\\X\\md-editor\\node_modules\\electron\\dist\\electron.exe';
 
   it('creates the shortcut when there is none', () => {
     expect(shortcutDecision(null, known)).toBe('create');
   });
 
-  it("updates a shortcut that points at the repo's runtime", () => {
+  it("updates a shortcut that runs an MD repo through that repo's runtime", () => {
+    expect(
+      shortcutDecision({ target: repoRuntime, args: '"C:\\Users\\X\\md-editor" --appdata' }, known),
+    ).toBe('update');
+  });
+
+  it('updates it even when the install runs from a different checkout of the repo', () => {
+    // The original bug in this script: it only knew the runtime of the checkout it ran from.
     expect(
       shortcutDecision(
-        'c:\\users\\x\\md-editor\\node_modules\\electron\\dist\\electron.exe',
-        known,
+        { target: repoRuntime, args: '"C:\\Users\\X\\md-editor" --appdata' },
+        { ...known, isMdApp: (dir: string) => samePath(dir, mdRepos[0]) },
       ),
     ).toBe('update');
   });
 
   it('updates a shortcut that already points at the install folder', () => {
-    expect(shortcutDecision(known.installElectron, known)).toBe('update');
+    expect(
+      shortcutDecision({ target: known.installElectron, args: '"anything" --appdata' }, known),
+    ).toBe('update');
+  });
+
+  it('leaves an Electron shortcut that runs some other app', () => {
+    expect(
+      shortcutDecision(
+        {
+          target: 'C:\\Users\\X\\other\\node_modules\\electron\\dist\\electron.exe',
+          args: '"C:\\Users\\X\\other"',
+        },
+        known,
+      ),
+    ).toBe('leave');
   });
 
   it('leaves a shortcut that points somewhere else', () => {
-    expect(shortcutDecision('C:\\Program Files\\Other\\other.exe', known)).toBe('leave');
+    expect(
+      shortcutDecision({ target: 'C:\\Program Files\\Other\\other.exe', args: '' }, known),
+    ).toBe('leave');
+  });
+});
+
+describe('isMdApp', () => {
+  it('accepts a folder whose package.json is md-editor', () => {
+    write('repo/package.json', JSON.stringify({ name: 'md-editor', productName: 'MD' }));
+    expect(isMdApp(path.join(dir, 'repo'))).toBe(true);
+  });
+
+  it('rejects another package and a folder without package.json', () => {
+    write('other/package.json', JSON.stringify({ name: 'other' }));
+    expect(isMdApp(path.join(dir, 'other'))).toBe(false);
+    expect(isMdApp(path.join(dir, 'nothing'))).toBe(false);
   });
 });

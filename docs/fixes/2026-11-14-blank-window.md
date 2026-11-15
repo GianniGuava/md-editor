@@ -61,7 +61,7 @@ Unit (`tools/desktop-install.test.ts`):
 - A missing `.vite/build/preload.cjs` is reported.
 - A `main.cjs` containing a dev-server address (`http://localhost:`) is reported as a development build.
 - The runtime is copied when the installed copy is missing or its `version` file differs, and skipped when it matches.
-- The shortcut matcher picks shortcuts that point at the repo's `electron.exe` or at the install folder, and ignores others.
+- The shortcut matcher updates a shortcut that points at the install folder, or that runs a checkout of md-editor (by its package.json) through a repo's `electron.exe`, from any checkout; it leaves other shortcuts alone.
 
 Live: done checks 1 to 8, each with the command and output or a screenshot. What must keep working: the e2e suite (it still runs from the repo's `.vite/`), `npm start`, `npm run package`, `npm run make`.
 
@@ -88,4 +88,6 @@ About $13 to $15 from here [INFERRED]: build and tests about $5 to $7, live chec
 
 - The install script is `tools/desktop-install.mjs` (plain JavaScript, like `tools/build-logo.mjs`), not `.ts`: TypeScript would need `allowImportingTsExtensions` for the test to import a `.ts` file run directly by Node. The test stays TypeScript; `tsconfig.json` includes `tools/**/*.ts` and checks the script through it. Claude's call, 2026-11-14.
 - Safety added: the script only replaces or deletes a folder carrying its `.md-desktop` marker, and it refuses to change `MD.lnk` when that shortcut points at another program. Claude's call, 2026-11-14.
+- Found in the first live install: the shortcut matcher compared `MD.lnk` with the runtime of the checkout running the script (the fix-branch folder), so it left the real shortcut, which points at the main checkout, unchanged. It now recognises any shortcut that runs an md-editor checkout through a repo's Electron runtime; tests added first (they failed, then passed). Claude, 2026-11-14.
+- Done checks 2 and 5 used `npm start` in the fix-branch folder, not the main checkout, so the main checkout's `.vite/` (which `MD (2).lnk` still uses) was not disturbed. The installed copy references neither checkout (check 3). Claude, 2026-11-14.
 - `README.md`: the Smart App Control section now describes `npm run install:desktop`. The old example path there contained a tab character where a backslash followed by t had been typed (`C:\path<tab>o\md-editor`); that line is replaced. Claude's call, 2026-11-14.

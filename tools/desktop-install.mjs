@@ -54,7 +54,8 @@ export const checkBundle = (appDir) => {
     if (devUrl) {
       problems.push(
         `${MAIN} is a development build: its window loads ${devUrl[0]}, a dev server ` +
-          'that only runs during `npm start`. Stop `npm start` if it is running and try again.',
+          'that only runs during `npm start`. Stop `npm start` if it is running, then run ' +
+          '`npm run install:desktop`, which builds the production bundle first.',
       );
     }
   }
@@ -99,17 +100,44 @@ export const samePath = (a, b) => {
 };
 
 /**
- * What to do with MD.lnk given its current target (null when there is no shortcut).
- * Only a shortcut this project made (pointing at the repo's runtime or the install
- * folder's runtime) is changed; anything else is the user's and is left alone.
- * @param {string | null} currentTarget
- * @param {{ repoElectron: string, installElectron: string }} known
+ * The first argument of a shortcut's argument string, without its quotes.
+ * @param {string} args
+ * @returns {string | undefined}
+ */
+export const firstArgument = (args) => {
+  const m = String(args).trim().match(/^"([^"]*)"|^(\S+)/);
+  return m ? (m[1] ?? m[2]) : undefined;
+};
+
+/** Whether `dir` is a checkout of this project (its package.json is md-editor). */
+export const isMdApp = (dir) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name === 'md-editor';
+  } catch {
+    return false;
+  }
+};
+
+const REPO_RUNTIME_TAIL = ['node_modules', 'electron', 'dist', 'electron.exe'];
+
+/**
+ * What to do with MD.lnk (null when there is no shortcut). Only a shortcut that starts
+ * MD is changed: one already pointing at the install folder's runtime, or one running a
+ * checkout of this project through a repo's Electron runtime (the old way, from any
+ * checkout). Anything else is the user's and is left alone.
+ * @param {{ target: string, args: string } | null} current
+ * @param {{ installElectron: string, isMdApp: (dir: string) => boolean }} known
  * @returns {'create' | 'update' | 'leave'}
  */
-export const shortcutDecision = (currentTarget, known) => {
-  if (!currentTarget) return 'create';
-  if (samePath(currentTarget, known.repoElectron)) return 'update';
-  if (samePath(currentTarget, known.installElectron)) return 'update';
+export const shortcutDecision = (current, known) => {
+  if (!current || !current.target) return 'create';
+  if (samePath(current.target, known.installElectron)) return 'update';
+  const parts = path.win32.normalize(current.target).split('\\');
+  const tail = parts.slice(-REPO_RUNTIME_TAIL.length).map((p) => p.toLowerCase());
+  const app = firstArgument(current.args ?? '');
+  if (tail.join('\\') === REPO_RUNTIME_TAIL.join('\\') && app && known.isMdApp(app)) {
+    return 'update';
+  }
   return 'leave';
 };
 
@@ -231,17 +259,17 @@ const install = ({ repoDir, installDir, shortcut }) => {
   const appDir = path.join(installDir, 'app');
   const desktop = powershell("[Environment]::GetFolderPath('Desktop')");
   const lnk = path.join(desktop, 'MD.lnk');
-  const current = fs.existsSync(lnk)
-    ? powershell('(New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK).TargetPath', {
-        MD_LNK: lnk,
-      }) || null
-    : null;
-  const decision = shortcutDecision(current, {
-    repoElectron: path.join(srcDist, 'electron.exe'),
-    installElectron,
-  });
+  let current = null;
+  if (fs.existsSync(lnk)) {
+    const [target = '', args = ''] = powershell(
+      '$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:MD_LNK); $s.TargetPath; $s.Arguments',
+      { MD_LNK: lnk },
+    ).split(/\r?\n/);
+    current = { target, args };
+  }
+  const decision = shortcutDecision(current, { installElectron, isMdApp });
   if (decision === 'leave') {
-    log(`${lnk} points at ${current}, not at MD, so it was left unchanged.`);
+    log(`${lnk} starts ${current.target} ${current.args}, not MD, so it was left unchanged.`);
     log(`To use the installed copy, point a shortcut at ${installElectron} with arguments "${appDir}" --appdata`);
     return;
   }
