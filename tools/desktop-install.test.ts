@@ -331,10 +331,13 @@ describe('runEach', () => {
 
 /* ---------------- install() against temporary folders ---------------- */
 
-const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+// These tests lock a file or folder with chmod. On Windows chmod only sets the read-only
+// flag, which neither stops reading nor (for Node) deleting, and root ignores permissions.
+const cannotLock =
+  process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0);
 
 describe('removeOurs', () => {
-  it.skipIf(isRoot)('deletes the marker last, so a half-deleted folder is still ours', () => {
+  it.skipIf(cannotLock)('deletes the marker last, so a half-deleted folder is still ours', () => {
     write('inst/.md-desktop', 'marker');
     write('inst/a/locked/file', 'x');
     const locked = path.join(dir, 'inst', 'a', 'locked');
@@ -453,7 +456,7 @@ describe('install', () => {
     expect(fs.existsSync(`${inst}.new`)).toBe(false);
   });
 
-  it.skipIf(isRoot)(
+  it.skipIf(cannotLock)(
     'keeps the last working copy when a run after a killed one also fails',
     () => {
       run();
@@ -471,7 +474,7 @@ describe('install', () => {
     },
   );
 
-  it.skipIf(isRoot)('restores the previous copy exactly when copying the build fails', () => {
+  it.skipIf(cannotLock)('restores the previous copy exactly when copying the build fails', () => {
     run();
     write('repo/.vite/renderer/main_window/unreadable.js', 'x');
     const unreadable = path.join(repo, '.vite/renderer/main_window/unreadable.js');
@@ -487,7 +490,7 @@ describe('install', () => {
     expect(fs.existsSync(`${inst}.old`)).toBe(false);
   });
 
-  it.skipIf(isRoot)('moves a reused runtime back when a later step fails', () => {
+  it.skipIf(cannotLock)('moves a reused runtime back when a later step fails', () => {
     run();
     write('MD-desktop/app/.dev-userdata/locked', 'x');
     const locked = path.join(inst, 'app/.dev-userdata/locked');
