@@ -81,18 +81,31 @@ typing tests fail for that reason alone).
 
 Windows 11's Smart App Control blocks unsigned executables once it leaves evaluation
 mode, and the packaged `md.exe` is unsigned (PLAN.md R-14, R-20). Electron's own
-runtime in `node_modules` is signed, so the production bundle can be run through it
-instead; this is what the desktop shortcut does:
+runtime is signed, so the production bundle can be run through it instead. Install
+that desktop copy with:
 
 ```
-node_modules\electron\dist\electron.exe "C:\path	o\md-editor" --appdata
+npm run install:desktop
 ```
+
+It builds the production bundle, checks that it is not a development build, copies
+it with its own copy of the Electron runtime to `%LOCALAPPDATA%\MD-desktop`
+(`MD_DESKTOP_DIR` overrides the folder), and points the Desktop shortcut `MD.lnk` at:
+
+```
+%LOCALAPPDATA%\MD-desktop\runtime\electron.exe "%LOCALAPPDATA%\MD-desktop\app" --appdata
+```
+
+The copy lives outside the repo, so `npm start` (which replaces `.vite/` with a
+development build that needs its dev server), `npm ci` or a branch switch cannot leave
+the shortcut on a blank window. Run `npm run install:desktop` again, with MD closed,
+when you want pulled changes on the desktop. `--no-shortcut` leaves `MD.lnk` alone, and
+a shortcut that points at some other program is never changed.
 
 `--appdata` keeps the normal `%APPDATA%\MD` profile (without it a runtime launch
-uses `.dev-userdata` like `npm start`). Run `npm run package` after pulling changes
-to refresh the bundle in `.vite/`. Auto-update does not run in this mode. The real fix
-is code signing (R-20); turning Smart App Control off is possible but cannot be undone
-without reinstalling Windows.
+uses `.dev-userdata` like `npm start`). Auto-update does not run in this mode. The real
+fix is code signing (R-20); turning Smart App Control off is possible but cannot be
+undone without reinstalling Windows.
 
 The previous launch's session is kept as `%APPDATA%\MD\session.previous.json`; copy it
 over `session.json` (with the app closed) to get an earlier tab list back.
