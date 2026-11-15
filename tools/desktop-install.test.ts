@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -369,6 +369,7 @@ describe('install', () => {
     write('repo/.vite/renderer/main_window/index.html', '<!doctype html>');
     write('repo/assets/app.ico', 'ico');
     write('repo/node_modules/electron/dist/electron.exe', `exe ${version}`);
+    write('repo/node_modules/electron/dist/ffmpeg.dll', 'dll');
     write('repo/node_modules/electron/dist/version', version);
   };
 
@@ -454,6 +455,48 @@ describe('install', () => {
     expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
     expect(fs.existsSync(`${inst}.old`)).toBe(false);
     expect(fs.existsSync(`${inst}.new`)).toBe(false);
+  });
+
+  it('takes over an empty staging or install folder an interrupted run left without a marker', () => {
+    // A kill between creating the folder and writing its marker; an empty folder holds
+    // nothing to lose.
+    fs.mkdirSync(`${inst}.new`);
+    fs.mkdirSync(inst);
+    run();
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    expect(fs.existsSync(`${inst}.new`)).toBe(false);
+  });
+
+  it('copies a fresh runtime after putting back an interrupted copy, instead of reusing it', () => {
+    run();
+    // An earlier delete of .old stopped partway, then the install folder was deleted by hand.
+    fs.renameSync(inst, `${inst}.old`);
+    fs.rmSync(path.join(`${inst}.old`, 'runtime', 'ffmpeg.dll'));
+    run();
+    expect(read('runtime/ffmpeg.dll')).toBe('dll');
+    expect(lines.join('\n')).toMatch(/runtime copied/);
+  });
+
+  it('keeps the runtime when moving it back fails during an undo', () => {
+    run();
+    const realRename = fs.renameSync;
+    const spy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      const f = String(from);
+      // The final swap and the runtime's move back both fail, as when something holds
+      // the staging folder open.
+      if (f === `${inst}.new` || f === path.join(`${inst}.new`, 'runtime')) {
+        throw Object.assign(new Error(`EPERM: rename ${f}`), { code: 'EPERM', path: f });
+      }
+      return realRename(from, to);
+    });
+    try {
+      expect(() => run()).toThrow(expect.objectContaining({ code: 'EPERM' }));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(read('runtime/electron.exe')).toBe('exe 44.8.0');
+    expect(read('runtime/ffmpeg.dll')).toBe('dll');
+    expect(read('app/.vite/renderer/main_window/index.html')).toBe('<!doctype html>');
   });
 
   it.skipIf(cannotLock)(

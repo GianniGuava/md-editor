@@ -273,16 +273,18 @@ const runPowershell = (script, env = {}) =>
   );
 
 /**
- * Refuse to touch a folder this script did not make.
+ * Refuse to touch a folder this script did not make. An empty folder is accepted: it
+ * holds nothing to lose, and a run killed between creating a folder and writing its
+ * marker leaves one.
  * @param {string} dir
  */
 const assertOurs = (dir) => {
-  if (fs.existsSync(dir) && !fs.existsSync(path.join(dir, MARKER))) {
-    throw new Stop(
-      `${dir} exists but was not made by this script (no ${MARKER} marker), so it is left ` +
-        'alone. Move it, or set MD_DESKTOP_DIR to another folder, and run again.',
-    );
-  }
+  if (!fs.existsSync(dir) || hasMarker(dir)) return;
+  if (fs.statSync(dir).isDirectory() && fs.readdirSync(dir).length === 0) return;
+  throw new Stop(
+    `${dir} exists but was not made by this script (no ${MARKER} marker), so it is left ` +
+      'alone. Move it, or set MD_DESKTOP_DIR to another folder, and run again.',
+  );
 };
 
 /**
@@ -321,7 +323,9 @@ export const install = ({
   for (const dir of [installDir, stage, old]) assertOurs(dir);
 
   // An earlier run was killed after moving the installed copy aside: put it back first,
-  // so the clean-up below can never delete the last working copy.
+  // so the clean-up below can never delete the last working copy. Its runtime is not
+  // reused below, since a delete that stopped partway may have left it incomplete.
+  let recovered = false;
   if (!fs.existsSync(installDir) && hasMarker(old)) {
     const oldRuntime = path.join(old, 'runtime');
     const stagedRuntime = path.join(stage, 'runtime');
@@ -329,6 +333,7 @@ export const install = ({
       fs.renameSync(stagedRuntime, oldRuntime);
     }
     fs.renameSync(old, installDir);
+    recovered = true;
     log(`Put back the copy an interrupted install had moved to ${old}.`);
   }
 
@@ -369,7 +374,7 @@ export const install = ({
     }
 
     const oldRuntime = path.join(old, 'runtime');
-    if (hadInstall && !runtimeNeedsCopy(srcDist, oldRuntime)) {
+    if (hadInstall && !recovered && !runtimeNeedsCopy(srcDist, oldRuntime)) {
       fs.renameSync(oldRuntime, path.join(stage, 'runtime'));
       reusedRuntime = true;
     } else {
@@ -394,16 +399,33 @@ export const install = ({
   } catch (err) {
     // Put the previous copy back exactly as it was. Each step runs even if one before it
     // fails, and the original error is the one reported.
+    const stagedRuntime = path.join(stage, 'runtime');
+    const oldRuntime = path.join(old, 'runtime');
     const failures = runEach([
       [
         'move the reused runtime back',
         () => {
-          if (reusedRuntime && fs.existsSync(path.join(stage, 'runtime'))) {
-            fs.renameSync(path.join(stage, 'runtime'), path.join(old, 'runtime'));
+          if (!reusedRuntime || !fs.existsSync(stagedRuntime)) return;
+          try {
+            fs.renameSync(stagedRuntime, oldRuntime);
+          } catch {
+            // Something may hold the staging folder; a copy still works.
+            fs.rmSync(oldRuntime, { recursive: true, force: true });
+            fs.cpSync(stagedRuntime, oldRuntime, { recursive: true });
           }
         },
       ],
-      ['remove the unfinished copy', () => removeOurs(stage)],
+      [
+        'remove the unfinished copy',
+        () => {
+          // Never delete the only copy of the runtime: it stays in the marked staging
+          // folder, which the next run cleans up.
+          if (reusedRuntime && !fs.existsSync(path.join(oldRuntime, 'electron.exe'))) {
+            throw new Error(`the runtime is still in ${stagedRuntime}`);
+          }
+          removeOurs(stage);
+        },
+      ],
       [
         'put the previous copy back',
         () => {
