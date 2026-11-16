@@ -320,6 +320,16 @@ export const install = ({
         '`node node_modules/electron/install.js`, then run this again.',
     );
   }
+  // The install, staging and backup folders are made one level deep, so their parent must
+  // exist (it always does for the default under %LOCALAPPDATA%; MD_DESKTOP_DIR may name any).
+  const parent = path.dirname(installDir);
+  if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
+    throw new Stop(
+      `${parent} is not an existing folder, so ${installDir} cannot be made in it. Create ` +
+        'that folder, or set MD_DESKTOP_DIR to a folder inside one that exists, and run this ' +
+        'again. Nothing was changed.',
+    );
+  }
   for (const dir of [installDir, stage, old]) assertOurs(dir);
 
   // An earlier run was killed after moving the installed copy aside: put it back first,

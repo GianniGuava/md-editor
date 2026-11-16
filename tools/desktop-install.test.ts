@@ -427,6 +427,20 @@ describe('install', () => {
     expect(read('mine.txt')).toBe('keep');
   });
 
+  it('stops with a plain message when the install folder has no parent folder', () => {
+    inst = path.join(dir, 'missing', 'MD-desktop');
+    expect(() => run()).toThrow(Stop);
+    expect(() => run()).toThrow(/is not an existing folder.*Nothing was changed/s);
+    expect(fs.existsSync(path.join(dir, 'missing'))).toBe(false);
+  });
+
+  it('stops with a plain message when the parent is a file, not a folder', () => {
+    write('afile', 'x');
+    inst = path.join(dir, 'afile', 'MD-desktop');
+    expect(() => run()).toThrow(/is not an existing folder/);
+    expect(fs.readFileSync(path.join(dir, 'afile'), 'utf8')).toBe('x');
+  });
+
   it('refuses a development build and leaves the installed copy unchanged', () => {
     run();
     write('repo/.vite/build/main.cjs', 'loadURL("http://localhost:5173")');
