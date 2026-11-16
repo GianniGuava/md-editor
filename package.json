@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build:logo": "node tools/build-logo.mjs",
+    "install:desktop": "electron-forge package && node tools/desktop-install.mjs",
     "test:e2e": "playwright test",
     "test:e2e:web": "playwright test --config playwright.web.config.ts",
     "check": "npm run typecheck && npm run lint && npm test"

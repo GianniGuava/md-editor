@@ -11,6 +11,7 @@
     ".vite/**",
     "out/**",
     "README.md",
-    "web/dist/**"
+    "web/dist/**",
+    "docs/fixes/*-handoff-*.md"
   ]
 }
