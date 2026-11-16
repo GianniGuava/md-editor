@@ -430,14 +430,14 @@ describe('install', () => {
   it('stops with a plain message when the install folder has no parent folder', () => {
     inst = path.join(dir, 'missing', 'MD-desktop');
     expect(() => run()).toThrow(Stop);
-    expect(() => run()).toThrow(/is not an existing folder.*Nothing was changed/s);
+    expect(() => run()).toThrow(/does not exist.*drive is connected.*Nothing was changed/s);
     expect(fs.existsSync(path.join(dir, 'missing'))).toBe(false);
   });
 
   it('stops with a plain message when the parent is a file, not a folder', () => {
     write('afile', 'x');
     inst = path.join(dir, 'afile', 'MD-desktop');
-    expect(() => run()).toThrow(/is not an existing folder/);
+    expect(() => run()).toThrow(/is a file, not a folder.*Nothing was changed/s);
     expect(fs.readFileSync(path.join(dir, 'afile'), 'utf8')).toBe('x');
   });
 

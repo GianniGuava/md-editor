@@ -323,11 +323,17 @@ export const install = ({
   // The install, staging and backup folders are made one level deep, so their parent must
   // exist (it always does for the default under %LOCALAPPDATA%; MD_DESKTOP_DIR may name any).
   const parent = path.dirname(installDir);
-  if (!fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) {
+  if (!fs.existsSync(parent)) {
     throw new Stop(
-      `${parent} is not an existing folder, so ${installDir} cannot be made in it. Create ` +
-        'that folder, or set MD_DESKTOP_DIR to a folder inside one that exists, and run this ' +
-        'again. Nothing was changed.',
+      `${parent} does not exist, so ${installDir} cannot be made in it. Create that folder ` +
+        '(or, if it is on another drive, check that the drive is connected), or set ' +
+        'MD_DESKTOP_DIR to a folder inside one that exists, and run this again. Nothing was changed.',
+    );
+  }
+  if (!fs.statSync(parent).isDirectory()) {
+    throw new Stop(
+      `${parent} is a file, not a folder, so ${installDir} cannot be made in it. Set ` +
+        'MD_DESKTOP_DIR to a folder inside an existing folder, and run this again. Nothing was changed.',
     );
   }
   for (const dir of [installDir, stage, old]) assertOurs(dir);
