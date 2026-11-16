@@ -4,6 +4,14 @@ Written 2026-11-15 on claude-dev (the Linux server) at the end of chat "02 md-ed
 
 Why this file is in the repo: the PC has no NAS share mapped, so it cannot read `/mnt/code/_share/`. This handoff is committed on the fix branch; a copy is at `/mnt/code/_share/work/md-editor/2026-11-15-handoff-desktop-windows-checks.md` for Linux sessions. The previous handoff, from chat 01 on the PC, is `docs/fixes/2026-11-14-handoff-desktop-blank-window.md` on this branch; read its sections 2, 4 and 7 for the diagnosis, the live-check method and exact paths. Do not redo anything it lists as done.
 
+## 0. What this PC can and cannot reach
+
+Gianni, 2026-11-15: "the pc session cannot see what's in the NAS. I'm not even sure what should be setup on it. It only has my notebook". So on the PC there is no `/mnt/code/_share/`, no status page, no claude-dev (no scan templates, no chat 02 transcript, no shared memory index). Where the notebook asks for those:
+- Status note: not possible; put any open question in the reply, in the notebook's answer format.
+- Handoffs and reports: write them in this repo under `docs/fixes/`, commit them on the fix branch and push, as this file was; a claude-dev session copies them to the NAS later.
+- Scan briefs: none is needed for these checks; if one is, write it in the session (chat 01 did).
+- Missing details: ask Gianni; he can have a claude-dev session look them up in chat 02's transcript.
+
 ## 1. Goal and why
 
 Gianni's words (chat 01): "The MD desktop app (Electron, my md-editor repo, git@github.com:GianniGuava/md-editor.git) shows a blank window since I merged pull request #2 into main (merge commit a2c6288, 2026-11-14). Before the merge, main was e032486 and the app worked. Find out why, fix it, and verify the desktop app works. Follow my notebook rules as usual (plan before a nontrivial change, fix on its own branch, the repo's checks and the scan before the push)."
@@ -84,7 +92,7 @@ Do not redo: the diagnosis, the scan, the re-check, the Linux checks.
 
 ## 7. Where to look
 
-- Chat 02: session `2d17cc06-cb28-5e0b-8d24-d0cabc3cabdd` (cloud id `session_01FMij2BJZWzgYMGvumwfwuq`), transcript on claude-dev `/home/gianni/.claude-b/projects/-mnt-code/2d17cc06-cb28-5e0b-8d24-d0cabc3cabdd.jsonl`.
+- Chat 02: session `2d17cc06-cb28-5e0b-8d24-d0cabc3cabdd` (cloud id `session_01FMij2BJZWzgYMGvumwfwuq`), transcript on claude-dev `/home/gianni/.claude-b/projects/-mnt-code/2d17cc06-cb28-5e0b-8d24-d0cabc3cabdd.jsonl`. Not reachable from the PC (section 0).
 - Chat 01: session `bbecf166-7de3-4dfc-a763-027da46c45d7`, transcript on the PC `C:\Users\giann\.claude\projects\C--Users-giann-md-editor\bbecf166-7de3-4dfc-a763-027da46c45d7.jsonl`.
 - Fix note (spec, plan, changes, scan fixes, re-check): `docs/fixes/2026-11-14-blank-window.md`.
 - Notebook notes: NOTEBOOK.md, tools/build-workflow.md, tools/cost-and-models.md, tools/handoff-template.md.
@@ -95,4 +103,4 @@ Chat 02, rough [INFERRED]: about $8 to $10, of which the Opus re-check was about
 
 ## Starting prompt for the next chat (on the PC)
 
-> Title this chat "03 md-editor: desktop blank window" and tag it project:md-editor. In C:\Users\giann\md-editor\.claude\worktrees\fix-desktop-shortcut, run git fetch origin and git merge --ff-only origin/fix/desktop-shortcut-build, then continue from the handoff at docs/fixes/2026-11-15-handoff-desktop-windows-checks.md. Read it first. Then tell me in five lines what you understand the goal, the current state and the next step to be, and wait for my go-ahead. If you need a detail the handoff lacks, search the previous session's transcript it names before asking me.
+> Title this chat "03 md-editor: desktop blank window" and tag it project:md-editor. In C:\Users\giann\md-editor\.claude\worktrees\fix-desktop-shortcut, run git fetch origin and git merge --ff-only origin/fix/desktop-shortcut-build, then continue from the handoff at docs/fixes/2026-11-15-handoff-desktop-windows-checks.md. Read it first, starting with section 0 (this PC cannot reach the NAS or claude-dev). Then tell me in five lines what you understand the goal, the current state and the next step to be, and wait for my go-ahead. If you need a detail the handoff lacks, search chat 01's transcript on this PC, then ask me.
