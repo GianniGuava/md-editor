@@ -130,7 +130,9 @@ export function saveFile(req: SaveRequest): Promise<SaveChoice | null> {
       const name = cleanName(nameInput.value, req.suggestedName);
       const file = new File([req.text], name, { type: req.mime });
       // No await before share(): it must run inside the click to count as a user gesture.
-      navigator.share({ files: [file], title: name }).then(
+      // Files only: iOS "Save to Files" also saved a title or text as its own text.txt
+      // (phone test 2026-11-20: "text.txt" containing "test.md" next to test.md).
+      navigator.share({ files: [file] }).then(
         () => finish({ name, via: 'share' }),
         (err: unknown) => {
           const e = err as Error;
