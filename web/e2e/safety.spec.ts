@@ -376,3 +376,31 @@ test('after a PDF export, printing the page prints the page, not the old export'
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('#workspace')).toBeVisible();
 });
+
+test('sharing hands over the file alone, with no title or text beside it', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __shared?: object };
+    Object.assign(navigator, {
+      canShare: () => true,
+      share: (data: object) => {
+        w.__shared = data;
+        return Promise.resolve();
+      },
+    });
+  });
+  await page.reload();
+  await page.locator('.cm-content').click();
+  await page.keyboard.type('hello');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page
+    .locator('dialog.web-dialog')
+    .getByRole('button', { name: 'Share…' })
+    .click();
+  const shared = await page.evaluate(() => {
+    const d = (window as unknown as { __shared?: { files?: File[] } }).__shared;
+    return d ? { keys: Object.keys(d), name: d.files?.[0]?.name } : null;
+  });
+  expect(shared).toEqual({ keys: ['files'], name: 'Untitled-1.md' });
+});
