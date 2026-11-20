@@ -85,3 +85,38 @@ test('held upright, the layout is unchanged even with the keyboard up', async ({
   const toolbar = await box(page, '#toolbar');
   expect(toolbar.y).toBeGreaterThan(tabbar.y + 10); // still stacked
 });
+
+test('held upright, a tap just above the divider places the caret in the editor', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.waitForSelector('[role=tab]');
+  const editor = await box(page, '#editor-pane');
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await expect(page.locator('.cm-editor')).not.toHaveClass(/cm-focused/);
+  await page.touchscreen.tap(editor.x + 60, editor.y + editor.height - 6);
+  await expect(page.locator('.cm-editor')).toHaveClass(/cm-focused/);
+});
+
+test('held upright, the Menu button is on screen without swiping', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.waitForSelector('[role=tab]');
+  const menu = await box(page, '#menu-button');
+  expect(menu.x + menu.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
+test('a short window held upright keeps the normal layout', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 440 });
+  await page.goto('/');
+  await page.waitForSelector('[role=tab]');
+  await expect(page.locator('#status')).toBeVisible();
+  const tabbar = await box(page, '#tabbar');
+  const toolbar = await box(page, '#toolbar');
+  expect(toolbar.y).toBeGreaterThan(tabbar.y + 10);
+});

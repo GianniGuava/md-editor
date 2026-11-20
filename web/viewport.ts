@@ -30,11 +30,20 @@ export function installViewport(): void {
     if (keyboardUp(window.innerHeight, vv.height, vv.scale))
       document.documentElement.dataset.keyboard = 'up';
     else delete document.documentElement.dataset.keyboard;
-    // Undo Safari's scroll-to-caret only when not zoomed: while zoomed the user pans.
-    if (vv.scale <= 1.01 && (vv.offsetTop > 0 || window.scrollY > 0))
+    // Undo Safari's scroll-to-caret only when not zoomed (while zoomed the user pans)
+    // and no dialog is open (its field may need that scroll to be seen).
+    if (
+      vv.scale <= 1.01 &&
+      !document.querySelector('dialog[open]') &&
+      (vv.offsetTop > 0 || window.scrollY > 0)
+    )
       window.scrollTo(0, 0);
   };
   vv.addEventListener('resize', apply);
   vv.addEventListener('scroll', apply);
+  // A rotation can report the new visible height before the new window height; check
+  // again when the window itself changes, or the keyboard flag could stick (scan flag).
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', apply);
   apply();
 }

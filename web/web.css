@@ -1,7 +1,8 @@
 /* Browser build overrides (PLAN.md §35). Tokens only; no colour literals. */
 
 /* The page height follows the visual viewport, so the on-screen keyboard never covers
-   the preview (viewport.ts sets --vv-height). */
+   the app (viewport.ts sets --vv-height). Held upright the preview stays in view; held
+   sideways it steps aside while the keyboard is up (D-36). */
 html,
 body {
   height: var(--vv-height, 100%);
@@ -13,6 +14,11 @@ body {
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
     env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* The keyboard covers the home indicator, so its inset would only waste height. */
+html[data-keyboard='up'] body {
+  padding-bottom: 0;
 }
 
 /* The body grid has no column template; without a floor of 0 the single column grows to the
@@ -42,17 +48,28 @@ body {
    tabs and toolbar share one slim row and the status bar steps aside, and while the
    on-screen keyboard is up (viewport.ts sets data-keyboard) the preview and divider step
    aside so the editor gets the full width. The saved pane mode is not changed. */
-@media (max-height: 500px) and (pointer: coarse) {
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   #chrome {
     flex-direction: row;
     align-items: stretch;
   }
 
+  /* Only as wide as its tabs, at most 40%, so the tools get the rest (sideways scan,
+     finding 4). */
   #tabbar {
-    flex: 0 1 40%;
+    flex: 0 1 auto;
+    max-width: 40%;
     min-width: 0;
     border-bottom: 0;
     border-right: 1px solid var(--border);
+  }
+
+  /* The All tabs list opens from the tab bar's right end; open it rightwards so it
+     stays on a small screen (finding 8). */
+  #all-tabs-list {
+    right: auto;
+    left: 0;
+    max-width: calc(100vw - 2 * var(--space-2));
   }
 
   #toolbar {
@@ -67,8 +84,47 @@ body {
     flex: 0 0 auto;
   }
 
+  .toolbar-group + .toolbar-group {
+    margin-left: var(--space-1);
+  }
+
+  /* Out of sight but still read out: "Saved" and "Exported to" reach VoiceOver through
+     its live region (finding 5). */
   #status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* While typing, notices shrink to one line and Find to its first row, so the editor
+     keeps room for a few lines (finding 2; Gianni 2026-11-20, "5 a"). Both return in
+     full when the keyboard closes. */
+  html[data-keyboard='up'] .banner {
+    flex-wrap: nowrap;
+    padding-block: 2px;
+  }
+
+  html[data-keyboard='up'] .banner-message {
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  html[data-keyboard='up'] .banner-actions,
+  html[data-keyboard='up'] .banner-detail,
+  html[data-keyboard='up'] .banner + .banner {
     display: none;
+  }
+
+  html[data-keyboard='up'] .cm-editor .cm-panels-top {
+    max-height: 36px;
+    overflow-y: auto;
   }
 
   html[data-keyboard='up'] #panes[data-mode='split'] {
@@ -88,7 +144,9 @@ body {
 }
 
 /* Touch screens: the 8 px splitter gets a 44 px hit area without growing on screen
-   (WCAG 2.5.8 target size; the hit area overlaps the pane edges). */
+   (WCAG 2.5.8 target size). The extra area lies over the preview only, so a tap at the
+   editor's edge still places the caret (sideways scan, finding 1). Fields are at least
+   16 px, below which iOS zooms the page on focus (finding 6). */
 @media (pointer: coarse) {
   #splitter {
     position: relative;
@@ -98,11 +156,16 @@ body {
   #splitter::before {
     content: '';
     position: absolute;
-    inset: 0 -18px;
+    inset: 0 -36px 0 0;
   }
 
   #panes[data-orientation='rows'] #splitter::before {
-    inset: -18px 0;
+    inset: 0 0 -36px 0;
+  }
+
+  .cm-editor .cm-panel.cm-search input,
+  .web-dialog input {
+    font-size: max(16px, 1em);
   }
 }
 
@@ -112,6 +175,14 @@ body {
 }
 
 /* ---- Browser dialogs: save, confirm close, menu ---- */
+
+/* With the keyboard up, a dialog sits at the top of what is still visible, not in the
+   middle of the screen under the keyboard (sideways scan, finding 3). */
+html[data-keyboard='up'] .web-dialog {
+  margin: var(--space-2) auto auto;
+  max-height: calc(var(--vv-height, 100vh) - 2 * var(--space-2));
+}
+
 .web-dialog {
   width: min(520px, 92vw);
   max-height: 90vh;

@@ -2,6 +2,7 @@ import { createBrowserApi } from './api';
 import { installCommands } from './commands';
 import { claimInstance, soleInstance } from './instance';
 import { createStorage } from './storage';
+import { installThemeColor } from './themeColor';
 import { installViewport } from './viewport';
 
 /**
@@ -26,3 +27,4 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 await import('../src/renderer/index');
 // Web overrides load after the renderer's own styles so they win on equal specificity.
 await import('./web.css');
+installThemeColor();
