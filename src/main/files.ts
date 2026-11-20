@@ -20,7 +20,11 @@ export interface FileData {
   eol: '\n' | '\r\n';
   /** Set when the file was not UTF-8 and was read as this encoding (decodeText.ts). */
   encoding?: SourceEncoding;
+  /** Browser build only: how the text left the device (share sheet or download). */
+  delivered?: Delivery;
 }
+
+export type Delivery = 'shared' | 'downloaded';
 
 export type CloseDecision = 'save' | 'discard' | 'cancel';
 

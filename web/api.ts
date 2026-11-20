@@ -39,6 +39,18 @@ class Signal<T> {
   }
 }
 
+/**
+ * The preview shows web pictures (the site's policy allows https images, PLAN.md section
+ * 35), so the exported page may load them too; the desktop export only inlines local
+ * files. Only the image rule is widened: still no scripts or other remote content
+ * (scan finding F1; Gianni 2026-11-20, "4 a").
+ */
+export const allowWebImages = (html: string): string =>
+  html.replace(
+    /(Content-Security-Policy" content="[^"]*img-src data:)/,
+    '$1 https:',
+  );
+
 /** Subscription for an event that never fires in the browser. */
 const never = () => () => {};
 
@@ -94,6 +106,24 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
       }),
   );
   instance.onLost(() => showTakenOver());
+  // One Save, Save as or Export dialog at a time: each waits on storage before its
+  // dialog appears, and a second press in that moment stacked a second dialog (F7).
+  let dialogBusy = false;
+  const oneDialog = async <T>(
+    run: () => Promise<T>,
+    busy: () => T,
+  ): Promise<T> => {
+    if (dialogBusy) return busy();
+    dialogBusy = true;
+    try {
+      return await run();
+    } finally {
+      dialogBusy = false;
+    }
+  };
+  const delivery = (via: 'share' | 'download') =>
+    via === 'share' ? ('shared' as const) : ('downloaded' as const);
+
   /** The name a record was shared under; its path may carry a " (2)". */
   const nameOf = (path: string): Promise<string> =>
     storage.files.read(path).then(
@@ -203,40 +233,52 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
         return storage.files.read(path);
       },
       // Save = share or download again under the same name; the record keeps the path.
-      save: async (path, text, eol) => {
-        const name = await nameOf(path);
-        const choice = await saveFile({
-          suggestedName: name,
-          text: joinEol(text, eol),
-          mime: 'text/markdown',
-          fixedName: true,
-        });
-        if (!choice) throw new DOMException('Save cancelled', 'AbortError');
-        return recordOrExplain(choice.via, () =>
-          record(path, name, text, eol ?? '\n'),
-        );
-      },
+      save: (path, text, eol) =>
+        oneDialog(
+          async () => {
+            const name = await nameOf(path);
+            const choice = await saveFile({
+              suggestedName: name,
+              text: joinEol(text, eol),
+              mime: 'text/markdown',
+              fixedName: true,
+            });
+            if (!choice) throw new DOMException('Save cancelled', 'AbortError');
+            const data = await recordOrExplain(choice.via, () =>
+              record(path, name, text, eol ?? '\n'),
+            );
+            return { ...data, delivered: delivery(choice.via) };
+          },
+          () => {
+            throw new DOMException('A save is already open', 'AbortError');
+          },
+        ),
       // The renderer passes the current path as the suggestion when there is one.
-      saveAs: async (suggestedName, text, eol) => {
-        const own = suggestedName.includes('/') ? suggestedName : null;
-        const ownName = own ? await nameOf(own) : null;
-        const choice = await saveFile({
-          suggestedName: ownName ?? suggestedName,
-          text: joinEol(text, eol),
-          mime: 'text/markdown',
-          title: 'Save as',
-        });
-        if (!choice) return null;
-        return recordOrExplain(choice.via, async () => {
-          // The record keeps the name the user typed even when its path needs a
-          // " (2)" to stay unique, so the tab and later Saves use that name (A-flagB).
-          const path =
-            own && ownName === choice.name
-              ? own
-              : await storage.files.uniquePath('Shared', choice.name);
-          return record(path, choice.name, text, eol ?? '\n');
-        });
-      },
+      saveAs: (suggestedName, text, eol) =>
+        oneDialog(
+          async () => {
+            const own = suggestedName.includes('/') ? suggestedName : null;
+            const ownName = own ? await nameOf(own) : null;
+            const choice = await saveFile({
+              suggestedName: ownName ?? suggestedName,
+              text: joinEol(text, eol),
+              mime: 'text/markdown',
+              title: 'Save as',
+            });
+            if (!choice) return null;
+            const data = await recordOrExplain(choice.via, async () => {
+              // The record keeps the name the user typed even when its path needs a
+              // " (2)" to stay unique, so the tab and later Saves use that name (A-flagB).
+              const path =
+                own && ownName === choice.name
+                  ? own
+                  : await storage.files.uniquePath('Shared', choice.name);
+              return record(path, choice.name, text, eol ?? '\n');
+            });
+            return { ...data, delivered: delivery(choice.via) };
+          },
+          () => null,
+        ),
       pathForFile: (file) => {
         const key = `drop:${++dropCounter}`;
         dropped.set(key, file);
@@ -318,22 +360,27 @@ export function createBrowserApi(opts: BrowserApiOptions = {}): BrowserApi {
         pdfEngines: [],
         installCommand: '',
       }),
-      html: async ({ html, name }): Promise<ExportResult> => {
-        const choice = await saveFile({
-          suggestedName: `${name.replace(/\.[^.]+$/, '')}.html`,
-          text: html,
-          mime: 'text/html',
-          title: 'Export HTML',
-        });
-        if (!choice) return { ok: false, cancelled: true };
-        return {
-          ok: true,
-          path:
-            choice.via === 'share'
-              ? `"${choice.name}" through the share sheet`
-              : `Downloads/${choice.name}`,
-        };
-      },
+      html: ({ html, name }): Promise<ExportResult> =>
+        oneDialog(
+          async () => {
+            const choice = await saveFile({
+              suggestedName: `${name.replace(/\.[^.]+$/, '')}.html`,
+              text: allowWebImages(html),
+              mime: 'text/html',
+              title: 'Export HTML',
+            });
+            if (!choice) return { ok: false, cancelled: true };
+            return {
+              ok: true,
+              // iOS picks the folder and may number a repeated name, so say only the name.
+              path:
+                choice.via === 'share'
+                  ? `"${choice.name}" through the share sheet`
+                  : `"${choice.name}" as a download (iOS may add a number to the name)`,
+            };
+          },
+          () => ({ ok: false, cancelled: true }),
+        ),
       pdf: async ({ html, pageSize }): Promise<ExportResult> => {
         printStandalone(html, pageSize);
         return {

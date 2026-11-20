@@ -327,6 +327,8 @@ async function boot(): Promise<void> {
   window.md.onRemoveMoved(removeMoved);
 
   // ---- Saving ----
+  const deliveredWord = (how: 'shared' | 'downloaded') =>
+    how === 'shared' ? 'Shared' : 'Downloaded';
   // A failed save is reported on the tab's banner; a cancelled one is not (AbortError).
   const saveFailed = (d: Doc, err: unknown): false => {
     if ((err as { name?: string })?.name !== 'AbortError')
@@ -356,9 +358,12 @@ async function boot(): Promise<void> {
       savedText: text,
       diskHash: result.hash,
       mtimeMs: result.mtimeMs,
-      dirty: false,
+      // An edit made while the file was being written is not in it (scan F3).
+      dirty: textOf(d) !== text,
     });
     updateStatus();
+    if (result.delivered)
+      note(`${deliveredWord(result.delivered)} "${result.name}"`);
     return true;
   };
   const save = async (d: Doc): Promise<boolean> => {
@@ -371,15 +376,18 @@ async function boot(): Promise<void> {
       return saveFailed(d, err);
     }
     banners.dismiss(`save-failed:${d.id}`);
-    const { hash, mtimeMs } = saved;
+    const { hash, mtimeMs, delivered } = saved;
     store.update(d.id, {
       savedText: text,
       diskHash: hash,
       mtimeMs,
-      dirty: false,
+      // An edit made while the file was being written is not in it (scan F3).
+      dirty: textOf(d) !== text,
     });
     updateStatus();
-    note(`Saved "${d.name}"`);
+    // In the browser the file left through the share sheet or a download; MD cannot see
+    // whether the other app kept it, so say what happened, not "Saved" (scan F2).
+    note(`${delivered ? deliveredWord(delivered) : 'Saved'} "${d.name}"`);
     return true;
   };
 

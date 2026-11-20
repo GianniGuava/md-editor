@@ -35,7 +35,14 @@ export function shareSupported(mime = 'text/markdown'): boolean {
     return (
       typeof navigator.share === 'function' &&
       typeof navigator.canShare === 'function' &&
-      navigator.canShare({ files: [new File(['x'], 'x.md', { type: mime })] })
+      navigator.canShare({
+        // Ask about the kind of file that will really be shared (scan flag, 2026-11-20).
+        files: [
+          new File(['x'], mime === 'text/html' ? 'x.html' : 'x.md', {
+            type: mime,
+          }),
+        ],
+      })
     );
   } catch {
     return false;
@@ -43,7 +50,8 @@ export function shareSupported(mime = 'text/markdown'): boolean {
 }
 
 /** Extensions the app writes or reads; anything else after a dot is part of the name. */
-const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt|html?)$/i;
+const TEXT_EXT = /\.(md|markdown|mdown|mkd|txt)$/i;
+const HTML_EXT = /\.html?$/i;
 
 /**
  * Keep the typed name usable as a file name and make sure it ends in a text extension:
@@ -55,7 +63,9 @@ export function cleanName(typed: string, suggested: string): string {
     .replace(/[\\/:*?"<>|]+/g, '-')
     .replace(/[. ]+$/, '');
   if (!name) name = suggested;
-  if (!TEXT_EXT.test(name)) name += suggested.match(TEXT_EXT)?.[0] ?? '.md';
+  // An HTML export always ends in .html or .htm, a document in a text extension.
+  const wanted = HTML_EXT.test(suggested) ? HTML_EXT : TEXT_EXT;
+  if (!wanted.test(name)) name += suggested.match(wanted)?.[0] ?? '.md';
   return name;
 }
 
@@ -80,7 +90,9 @@ export function saveFile(req: SaveRequest): Promise<SaveChoice | null> {
       <form method="dialog" class="web-form">
         <h2 id="save-title">${esc(req.title ?? 'Save')}</h2>
         <p class="web-hint">Nothing is kept on a server. Share hands the file to another app
-          (Files, Mail, Notes…); Download puts it in this browser's downloads.</p>
+          (Files, Mail, Notes…); Download puts it in this browser's downloads. MD cannot see
+          what the other app does with it: if it keeps nothing (Copy, or cancelling there),
+          this tab still counts as shared.</p>
         <label for="save-name">File name</label>
         <input id="save-name" type="text" value="${esc(req.suggestedName)}"
                ${req.fixedName ? 'readonly' : ''} autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -121,13 +133,19 @@ export function saveFile(req: SaveRequest): Promise<SaveChoice | null> {
     });
 
     dlg.querySelector('[data-act=download]')!.addEventListener('click', () => {
-      const name = cleanName(nameInput.value, req.suggestedName);
+      // Save shows the record's name read-only and must deliver exactly that (F4).
+      const name = req.fixedName
+        ? req.suggestedName
+        : cleanName(nameInput.value, req.suggestedName);
       download(name, req.text, req.mime);
       finish({ name, via: 'download' });
     });
 
     dlg.querySelector('[data-act=share]')?.addEventListener('click', () => {
-      const name = cleanName(nameInput.value, req.suggestedName);
+      // Save shows the record's name read-only and must deliver exactly that (F4).
+      const name = req.fixedName
+        ? req.suggestedName
+        : cleanName(nameInput.value, req.suggestedName);
       const file = new File([req.text], name, { type: req.mime });
       // No await before share(): it must run inside the click to count as a user gesture.
       // Files only: iOS "Save to Files" also saved a title or text as its own text.txt
