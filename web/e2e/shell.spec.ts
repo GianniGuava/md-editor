@@ -72,3 +72,16 @@ test('offline, the installed app still starts after another file on the site was
   await expect(page.getByRole('tab')).toHaveCount(1);
   await context.setOffline(false);
 });
+
+test('held upright, the layout is unchanged even with the keyboard up', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.waitForSelector('[role=tab]');
+  await page.evaluate(() => (document.documentElement.dataset.keyboard = 'up'));
+  await expect(page.locator('#preview-pane')).toBeVisible();
+  await expect(page.locator('#status')).toBeVisible();
+  const tabbar = await box(page, '#tabbar');
+  const toolbar = await box(page, '#toolbar');
+  expect(toolbar.y).toBeGreaterThan(tabbar.y + 10); // still stacked
+});

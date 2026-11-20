@@ -38,6 +38,50 @@ body {
   }
 }
 
+/* A phone held sideways (short touch screen, PLAN.md D-36; Gianni 2026-11-20, "2a"):
+   tabs and toolbar share one slim row and the status bar steps aside, and while the
+   on-screen keyboard is up (viewport.ts sets data-keyboard) the preview and divider step
+   aside so the editor gets the full width. The saved pane mode is not changed. */
+@media (max-height: 500px) and (pointer: coarse) {
+  #chrome {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  #tabbar {
+    flex: 0 1 40%;
+    min-width: 0;
+    border-bottom: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  #toolbar {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .toolbar-group {
+    flex: 0 0 auto;
+  }
+
+  #status {
+    display: none;
+  }
+
+  html[data-keyboard='up'] #panes[data-mode='split'] {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  html[data-keyboard='up'] #panes[data-mode='split'] #preview-pane,
+  html[data-keyboard='up'] #panes[data-mode='split'] #splitter {
+    display: none;
+  }
+}
+
 /* One window only in the browser (D-33). */
 #toolbar .tool[title^='New window'] {
   display: none;
