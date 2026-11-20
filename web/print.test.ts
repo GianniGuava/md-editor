@@ -9,7 +9,7 @@ import {
 } from './print';
 import { buildStandaloneHtml } from '../src/renderer/exportHtml';
 import { acceleratorFor } from './commands';
-import { cleanName } from './dialogs';
+import { cleanName, shareSupported } from './dialogs';
 
 describe('print', () => {
   it('pulls the article and styles out of the standalone export', () => {
@@ -108,5 +108,30 @@ describe('printStandalone', () => {
     window.dispatchEvent(new Event('pointerdown'));
     expect(document.getElementById('print-root')).toBeNull();
     expect(document.getElementById('print-style')).toBeNull();
+  });
+});
+
+describe('cleanName for an HTML export', () => {
+  it('always ends in .html or .htm (scan flag, 2026-11-20)', () => {
+    expect(cleanName('notes.md', 'doc.html')).toBe('notes.md.html');
+    expect(cleanName('notes.txt', 'doc.html')).toBe('notes.txt.html');
+    expect(cleanName('page.htm', 'doc.html')).toBe('page.htm');
+    expect(cleanName('report', 'doc.html')).toBe('report.html');
+  });
+});
+
+describe('shareSupported', () => {
+  it('asks with a file of the kind that will be shared', () => {
+    const names: string[] = [];
+    Object.assign(navigator, {
+      share: () => Promise.resolve(),
+      canShare: (d: { files: File[] }) => {
+        names.push(d.files[0].name);
+        return true;
+      },
+    });
+    shareSupported('text/html');
+    shareSupported('text/markdown');
+    expect(names).toEqual(['x.html', 'x.md']);
   });
 });

@@ -222,6 +222,9 @@ export function createExportDialog(
       statusEl.textContent = `Export failed: ${(err as Error).message}`;
     } finally {
       goBtn.disabled = false;
+      // The button was disabled while a Save dialog was over it, so the browser could
+      // not return focus there; put it back for keyboard users (scan F6).
+      if (dlg.open) goBtn.focus();
     }
   });
 

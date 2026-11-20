@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { CloseDecision, FileData } from '../main/files';
+import type { CloseDecision, Delivery, FileData } from '../main/files';
 import type {
   SessionData,
   SessionWindowData,
@@ -108,7 +108,7 @@ const api = {
       path: string,
       text: string,
       eol?: '\n' | '\r\n',
-    ): Promise<{ hash: string; mtimeMs: number }> =>
+    ): Promise<{ hash: string; mtimeMs: number; delivered?: Delivery }> =>
       ipcRenderer.invoke('file:save', { path, text, eol }),
     saveAs: (
       suggestedName: string,
