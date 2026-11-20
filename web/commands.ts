@@ -263,10 +263,11 @@ export function installCommands(
   group.setAttribute('aria-label', 'Menu');
   group.appendChild(menuBtn);
 
-  // The renderer fills the toolbar during boot; add the menu once it has, and on Apple
-  // devices show the toolbar's shortcuts with Command.
+  // The renderer fills the toolbar during boot; add the menu once it has, first in the
+  // row so it is on screen without swiping on a phone (sideways scan, finding 4), and on
+  // Apple devices show the toolbar's shortcuts with Command.
   const finishToolbar = () => {
-    toolbar.appendChild(group);
+    toolbar.prepend(group);
     if (!apple) return;
     for (const b of toolbar.querySelectorAll<HTMLElement>('[data-keys]')) {
       const keys = b.dataset.keys;

@@ -103,12 +103,18 @@ export function createLayout(
           ? ((ev.clientY - rect.top) / rect.height) * 100
           : ((ev.clientX - rect.left) / rect.width) * 100,
       );
+    // A drag ends however the pointer goes away: lifted, cancelled by the system (a
+    // rotation, a gesture), or its capture lost; otherwise a later hover would drag.
     const up = () => {
       splitter.removeEventListener('pointermove', move);
       splitter.removeEventListener('pointerup', up);
+      splitter.removeEventListener('pointercancel', up);
+      splitter.removeEventListener('lostpointercapture', up);
     };
     splitter.addEventListener('pointermove', move);
     splitter.addEventListener('pointerup', up);
+    splitter.addEventListener('pointercancel', up);
+    splitter.addEventListener('lostpointercapture', up);
   });
 
   // Keyboard resize: Left/Right for side-by-side panes, Up/Down for stacked ones.

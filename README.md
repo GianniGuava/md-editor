@@ -70,7 +70,7 @@ Safari's seven-day storage cleanup does not apply.
 What differs from the desktop build, and why, is in PLAN.md §35 and decisions D-28 to D-34.
 Things Chromium-based tests cannot cover, to check on the device after a deploy: the Save
 dialog's Share… button opens the share sheet with the `.md` file; Export › PDF opens the
-print sheet with Save to Files; the preview stays visible while typing with the keyboard up.
+print sheet with Save to Files; held upright, the preview stays visible while typing with the keyboard up (held sideways it steps aside by design, PLAN.md D-36).
 
 `npm run test:e2e:web` needs Playwright's Chromium to start: on a Linux box without the
 browser's system libraries, `npx playwright install-deps` (needs sudo) installs them, and at
